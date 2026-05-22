@@ -984,6 +984,9 @@ public enum L10n {
     public static var searchYourPlexLibraryPlaceholder: String { tr("searchYourPlexLibraryPlaceholder") }
     public static var nothingHere: String { tr("nothingHere") }
     public static var couldNotReachPlexServer: String { tr("couldNotReachPlexServer") }
+    public static var plexPlaylists: String { tr("plexPlaylists") }
+    public static var plexSmartPlaylist: String { tr("plexSmartPlaylist") }
+    public static func plexTracksCount(_ n: Int) -> String { String(format: tr("plexTracksCountFormat"), n) }
     public static var connectsToPlexDirectlyDescription: String { tr("connectsToPlexDirectlyDescription") }
     public static var clickBelowToOpenPlex: String { tr("clickBelowToOpenPlex") }
     public static var waitingForPlexTvAuthorization: String { tr("waitingForPlexTvAuthorization") }
@@ -10359,6 +10362,15 @@ public enum L10n {
             "pt": "Nada aqui.",
             "pl": "Nic tutaj.",
             "zh-Hans": "\u{8FD9}\u{91CC}\u{4EC0}\u{4E48}\u{4E5F}\u{6CA1}\u{6709}\u{3002}",
+        ],
+        "plexPlaylists": [
+            "en": "Playlists",
+        ],
+        "plexSmartPlaylist": [
+            "en": "Smart",
+        ],
+        "plexTracksCountFormat": [
+            "en": "%d tracks",
         ],
         "couldNotReachPlexServer": [
             "en": "Couldn't reach your Plex server",

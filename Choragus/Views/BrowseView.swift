@@ -748,16 +748,20 @@ struct BrowseListView: View {
                                 Divider().padding(.leading, 64)
                         }
 
-                        if vm.loadedCount < vm.totalItems {
-                            // Bottom sentinel — both surfaces a spinner
-                            // while the next page is in flight AND
-                            // re-arms `loadMore` on its own appearance
-                            // for the case where the row-level trigger
-                            // didn't fire (very short result lists, or
-                            // the threshold rebuilt mid-fetch).
+                        if !vm.reachedEnd {
+                            // Bottom sentinel — surfaces a spinner while
+                            // the next page is in flight AND re-arms
+                            // `loadMore` on its own appearance for the
+                            // case where the row-level trigger didn't
+                            // fire. Gated on `reachedEnd` not
+                            // `loadedCount < totalItems` because SMAPI
+                            // services like Spotify lie about `total`
+                            // (matches first-page count), which would
+                            // hide the sentinel and freeze the list at
+                            // 50 items.
                             HStack(spacing: 8) {
                                 ProgressView().controlSize(.small)
-                                Text("\(vm.loadedCount) \(L10n.of) \(vm.totalItems)")
+                                Text("\(vm.loadedCount) — \(L10n.loading)")
                                     .font(.caption)
                                     .foregroundStyle(.tertiary)
                             }
@@ -897,6 +901,9 @@ struct BrowseListView: View {
                 }
             }
         }
+        #if DEBUG
+        AddToTestFixturesMenuItem(item: item)
+        #endif
     }
 
     private func smapiDestination(title: String, objectID: String) -> BrowseDestination {
@@ -1543,6 +1550,9 @@ struct AppleMusicSearchView: View {
                 }
             }
         }
+        #if DEBUG
+        AddToTestFixturesMenuItem(item: item)
+        #endif
     }
 
     /// Resolve album tracks via iTunes API, then add them all to queue in a
@@ -1737,6 +1747,9 @@ struct TuneInSearchView: View {
                             if item.isContainer {
                                 Button(L10n.browse) { handleTap(item) }
                             }
+                            #if DEBUG
+                            AddToTestFixturesMenuItem(item: item)
+                            #endif
                         }
                 }
                 .listStyle(.plain)
@@ -1889,6 +1902,9 @@ struct CalmRadioBrowseView: View {
                                         Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
                                     }
                                 }
+                                #if DEBUG
+                                AddToTestFixturesMenuItem(item: item)
+                                #endif
                             }
                     }
                     .listStyle(.plain)
@@ -1940,10 +1956,26 @@ struct SMAPIServiceSearchView: View {
     @State private var navStack: [SMAPISearchLevel] = []
     @State private var categoriesLoaded = false
     @State private var itemsCache: [Int: [BrowseItem]] = [:]
+    @State private var sortOrder: SearchSortOrder = .relevance
     /// Transient playback-failure banner. Clears itself after 4 s so the
     /// user sees the reason (e.g. Plex SMAPI rejection) without needing
     /// to open the log.
     @State private var playError: String?
+
+    private var sortedItems: [BrowseItem] {
+        switch sortOrder {
+        case .relevance:
+            return items
+        case .newest:
+            return items.sorted { ($0.releaseDate ?? .distantPast) > ($1.releaseDate ?? .distantPast) }
+        case .oldest:
+            return items.sorted { ($0.releaseDate ?? .distantFuture) < ($1.releaseDate ?? .distantFuture) }
+        case .title:
+            return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        case .artist:
+            return items.sorted { $0.artist.localizedCaseInsensitiveCompare($1.artist) == .orderedAscending }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2090,7 +2122,26 @@ struct SMAPIServiceSearchView: View {
                     smapiBulkActionBar
                     Divider()
                 }
-                List(items) { item in
+                HStack(spacing: 4) {
+                    Text(L10n.sortLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $sortOrder) {
+                        ForEach(SearchSortOrder.allCases, id: \.self) { order in
+                            Text(order.displayName).tag(order)
+                        }
+                    }
+                    .labelsHidden()
+                    .controlSize(.small)
+                    .frame(maxWidth: 140)
+                    .languageReactive()
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                Divider()
+
+                List(sortedItems) { item in
                     BrowseItemRow(item: item)
                         .contentShape(Rectangle())
                         .onTapGesture { handleTap(item) }
@@ -2111,7 +2162,7 @@ struct SMAPIServiceSearchView: View {
                         isLoading = false
                         return
                     }
-                    items = await ServiceSearchProvider.shared.browseSMAPI(
+                    items = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
                         id: level.containerID, serviceID: serviceID,
                         serviceURI: uri, token: token, sn: sn)
                     isLoading = false
@@ -2268,7 +2319,7 @@ struct SMAPIServiceSearchView: View {
                     out.append(item)
                 } else if let (token, uri, sn) = serviceCredentials() {
                     let id = SMAPIPrefix.strip(item.objectID, serviceID: serviceID)
-                    let kids = await ServiceSearchProvider.shared.browseSMAPI(
+                    let kids = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
                         id: id, serviceID: serviceID,
                         serviceURI: uri, token: token, sn: sn)
                     out.append(contentsOf: kids.filter { $0.resourceURI != nil && !$0.isContainer })
@@ -2355,6 +2406,9 @@ struct SMAPIServiceSearchView: View {
                 }
             }
         }
+        #if DEBUG
+        AddToTestFixturesMenuItem(item: item)
+        #endif
     }
 
     private func enqueueContainer(_ container: BrowseItem, in group: SonosGroup, playNext: Bool) async {
@@ -2378,8 +2432,9 @@ struct SMAPIServiceSearchView: View {
 
         let containerID = SMAPIPrefix.strip(container.objectID, serviceID: serviceID)
         guard let (token, uri, sn) = serviceCredentials() else { return }
-        let tracks = await ServiceSearchProvider.shared.browseSMAPI(
-            id: containerID, serviceID: serviceID, serviceURI: uri, token: token, sn: sn)
+        let tracks = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
+            id: containerID, serviceID: serviceID, serviceURI: uri, token: token, sn: sn,
+            maxItems: 10_000)
         let playable = tracks.filter { $0.resourceURI != nil && !$0.isContainer }
         guard !playable.isEmpty else {
             showPlayError("No playable tracks in \(container.title)")
@@ -2408,8 +2463,9 @@ struct SMAPIServiceSearchView: View {
 
         let containerID = SMAPIPrefix.strip(container.objectID, serviceID: serviceID)
         guard let (token, uri, sn) = serviceCredentials() else { return }
-        let tracks = await ServiceSearchProvider.shared.browseSMAPI(
-            id: containerID, serviceID: serviceID, serviceURI: uri, token: token, sn: sn)
+        let tracks = await ServiceSearchProvider.shared.pagedBrowseSMAPI(
+            id: containerID, serviceID: serviceID, serviceURI: uri, token: token, sn: sn,
+            maxItems: 10_000)
         let playable = tracks.filter { $0.resourceURI != nil && !$0.isContainer }
         guard !playable.isEmpty else {
             showPlayError("No playable tracks in \(container.title)")

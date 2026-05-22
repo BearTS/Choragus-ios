@@ -422,7 +422,7 @@ final class ConstantsTests: XCTestCase {
         XCTAssertEqual(Timing.subscriptionRenewalCheck, 60)
         XCTAssertEqual(Timing.reconciliationPolling, 15)
         XCTAssertEqual(Timing.legacyPolling, 5)
-        XCTAssertEqual(Timing.metadataPolling, 5_000_000_000)
+        XCTAssertEqual(Timing.activePositionPolling, 2)
         XCTAssertEqual(Timing.musicServicesRetryDelay, 3)
         XCTAssertEqual(Timing.groupRefreshDelay, 1)
         XCTAssertEqual(Timing.searchDebounce, 300_000_000)

@@ -27,6 +27,13 @@ struct QueueView: View {
     /// source we've found that reliably agrees with the Sonos app.
     @State private var lastObservedTrackURI: String?
     @State private var trackURIRefreshTask: Task<Void, Never>?
+    /// True once we've performed the one-shot initial scroll-to-current
+    /// for the currently-selected `group`. Reset to `false` whenever the
+    /// user switches speakers. Without this, the `.onChange(of: vm.current-
+    /// Track)` handler can miss the launch case where `currentTrack` is
+    /// set before `queueItems` are populated — `scrollTo(id:)` is a no-op
+    /// against an id that hasn't materialised in the LazyVStack yet.
+    @State private var didInitialScroll = false
 
     @EnvironmentObject private var sonosManager: SonosManager
 
@@ -62,6 +69,10 @@ struct QueueView: View {
             vm.group = group
             vm.queueItems = []
             vm.currentTrack = 0
+            // New speaker → new initial-scroll window. The first time
+            // `queueItems` populates for this group we want the one-shot
+            // jump-to-current-track to fire again.
+            didInitialScroll = false
             Task { await vm.loadQueue() }
             _ = newID
         }
@@ -329,11 +340,28 @@ struct QueueView: View {
                     ))
             }
         }
-        .onChange(of: vm.currentTrack) {
-            guard vm.currentTrack > 0, vm.isPlayingFromQueue else { return }
-            withAnimation(.easeInOut(duration: 0.3)) {
-                proxy.scrollTo(vm.currentTrack, anchor: .center)
-            }
+        .onChange(of: vm.currentTrack) { _, newTrack in
+            guard newTrack > 0, vm.isPlayingFromQueue else { return }
+            performTrackChangeScroll(proxy: proxy, animated: didInitialScroll)
+        }
+        .onChange(of: vm.queueItems.count) { _, newCount in
+            guard !didInitialScroll,
+                  newCount > 0,
+                  vm.currentTrack > 0,
+                  vm.isPlayingFromQueue else { return }
+            performTrackChangeScroll(proxy: proxy, animated: false)
+        }
+        .onChange(of: vm.isPlayingFromQueue) { _, newIsPlaying in
+            // Metadata may flip `isQueueSource` to true *after* both
+            // `currentTrack` and `queueItems` are already set by
+            // `loadQueue`. Neither of the other watchers re-fires for
+            // that flip, so this handler is the missing trigger for
+            // the launch-from-mid-queue case.
+            guard !didInitialScroll,
+                  newIsPlaying,
+                  vm.queueItems.count > 0,
+                  vm.currentTrack > 0 else { return }
+            performTrackChangeScroll(proxy: proxy, animated: false)
         }
         .onChange(of: vm.isShuffling) {
             if !vm.isShuffling, let firstID = vm.queueItems.first?.id {
@@ -350,6 +378,31 @@ struct QueueView: View {
         vm.sonosManager.draggedBrowseItem = nil
         Task { await vm.addBrowseItem(item, atPosition: atPosition) }
         return true
+    }
+
+    /// Anchors the previous-track row to the top of the queue panel so
+    /// the now-playing row sits as the second visible entry. Used by
+    /// the three `.onChange` watchers (currentTrack, queueItems.count,
+    /// isPlayingFromQueue). The scroll is dispatched on the next
+    /// runloop turn so the `LazyVStack` has a chance to materialise
+    /// the target row's identifier — `ScrollViewReader.scrollTo` is a
+    /// silent no-op against ids that aren't yet in the visible /
+    /// pre-materialised window, which produced the launch regression
+    /// where the spinner cleared but the queue stayed at the top.
+    private func performTrackChangeScroll(proxy: ScrollViewProxy, animated: Bool) {
+        let current = vm.currentTrack
+        guard current > 0 else { return }
+        let anchorTrackID = current > 1 ? current - 1 : current
+        DispatchQueue.main.async {
+            if animated {
+                withAnimation(.easeInOut(duration: 0.45)) {
+                    proxy.scrollTo(anchorTrackID, anchor: .top)
+                }
+            } else {
+                proxy.scrollTo(anchorTrackID, anchor: .top)
+            }
+            didInitialScroll = true
+        }
     }
 }
 
@@ -442,25 +495,106 @@ struct QueueItemRow: View {
     }
 }
 
-// MARK: - Animated Now Playing Bars
+// MARK: - Now Playing Indicator
+//
+// Three vertical bars that breathe in and out on a sine-like curve next
+// to the currently-playing queue row.
+//
+// Hosted as an `NSViewRepresentable` wrapping a plain `NSView` with
+// three `CALayer` sublayers. Each sublayer carries an indefinitely-
+// repeating `CABasicAnimation` on `transform.scale.y`. The animation
+// runs entirely on the render server — the SwiftUI attribute graph is
+// never touched after the layer is first created, so the bars do not
+// drive `ViewGraph.updateOutputs` or `NSHostingView.layout` per frame.
+//
+// Earlier SwiftUI-native attempts (TimelineView + scaleEffect,
+// TimelineView + Canvas, SF Symbol `.symbolEffect`) all reproduced a
+// 50–60% main-thread CPU spike when the queue was visible because each
+// frame's animation tick fed back through SwiftUI's graph and forced a
+// layout pass on the surrounding LazyVStack of queue rows. Dropping out
+// of SwiftUI for the animation alone removes the cascade.
+private struct NowPlayingBars: NSViewRepresentable {
+    func makeNSView(context: Context) -> NowPlayingBarsView {
+        NowPlayingBarsView()
+    }
 
-private struct NowPlayingBars: View {
-    @State private var animate = false
+    func updateNSView(_ nsView: NowPlayingBarsView, context: Context) {}
+}
 
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<3, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(.white)
-                    .frame(width: 3)
-                    .scaleEffect(y: animate ? CGFloat.random(in: 0.3...1.0) : 0.4, anchor: .bottom)
-                    .animation(
-                        .easeInOut(duration: 0.4 + Double(i) * 0.15)
-                        .repeatForever(autoreverses: true),
-                        value: animate
-                    )
+private final class NowPlayingBarsView: NSView {
+    private static let barCount = 3
+    private static let barWidth: CGFloat = 3
+    private static let barSpacing: CGFloat = 2
+    private static let minScale: CGFloat = 0.3
+    private static let basePeriod: Double = 0.4
+    private static let perBarPeriodIncrement: Double = 0.15
+    private static let animationKey = "breathing"
+
+    private let barLayers: [CALayer] = (0..<NowPlayingBarsView.barCount).map { _ in CALayer() }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        // Layer-hosting pattern: assign the layer first, then opt in
+        // to `wantsLayer`. Reverse order (`wantsLayer = true` then
+        // `layer = …`) makes AppKit create its own backing layer and
+        // discard ours, which silently drops every animation we add.
+        let host = CALayer()
+        self.layer = host
+        self.wantsLayer = true
+        for barLayer in barLayers {
+            barLayer.backgroundColor = NSColor.white.cgColor
+            barLayer.cornerRadius = 1
+            barLayer.anchorPoint = CGPoint(x: 0.5, y: 0)
+            host.addSublayer(barLayer)
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not used")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // `CAAnimation` instances added before the layer joins a window
+        // are dropped silently — they require a live render-server
+        // backing to register. Attaching here guarantees the layer is
+        // mounted, and re-attaching covers the queue-row recycling case
+        // where the same view is removed and re-added on track change.
+        guard window != nil else { return }
+        for (index, barLayer) in barLayers.enumerated() {
+            if barLayer.animation(forKey: Self.animationKey) == nil {
+                attachBreathingAnimation(to: barLayer, index: index)
             }
         }
-        .onAppear { animate = true }
+    }
+
+    override func layout() {
+        super.layout()
+        let count = CGFloat(barLayers.count)
+        let totalWidth = count * Self.barWidth + (count - 1) * Self.barSpacing
+        let originX = (bounds.width - totalWidth) / 2
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (index, barLayer) in barLayers.enumerated() {
+            let centreX = originX + CGFloat(index) * (Self.barWidth + Self.barSpacing) + Self.barWidth / 2
+            barLayer.bounds = CGRect(x: 0, y: 0, width: Self.barWidth, height: bounds.height)
+            barLayer.position = CGPoint(x: centreX, y: 0)
+        }
+        CATransaction.commit()
+    }
+
+    private func attachBreathingAnimation(to barLayer: CALayer, index: Int) {
+        let period = Self.basePeriod + Self.perBarPeriodIncrement * Double(index)
+        let animation = CABasicAnimation(keyPath: "transform.scale.y")
+        animation.fromValue = Self.minScale
+        animation.toValue = 1.0
+        animation.duration = period / 2.0
+        animation.autoreverses = true
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        // Stagger the per-bar phase deterministically so the three bars
+        // don't pulse in unison — each shifts by a quarter-cycle.
+        animation.timeOffset = period * 0.25 * Double(index)
+        barLayer.add(animation, forKey: Self.animationKey)
     }
 }

@@ -107,6 +107,184 @@ final class ArtResolver {
         self.albumArtSearch = albumArtSearch
     }
 
+    // MARK: - Orchestration
+
+    @MainActor
+    protocol Dependencies: AnyObject {
+        var groupTransportStates: [String: TransportState] { get }
+        func cacheArtURL(_ url: String, forURI uri: String, title: String, itemID: String)
+    }
+
+    func handleMetadataChanged(_ metadata: TrackMetadata,
+                                group: SonosGroup,
+                                dependencies: Dependencies) {
+        let priorTrackURI = lastTrackURI
+        handleTrackURIChanged(trackMetadata: metadata, group: group)
+        updateDisplayedArt(trackMetadata: metadata, group: group)
+
+        guard !metadata.isAdBreak else { return }
+
+        if let artStr = metadata.albumArtURI, !artStr.isEmpty, let url = URL(string: artStr) {
+            if displayedArtURL != url && !forceWebArt {
+                displayedArtURL = url
+            }
+            if let pinned = pinnedURL(for: metadata), pinned != url, !forceWebArt {
+                invalidateArtResolution(for: metadata)
+            }
+        } else if !forceWebArt {
+            // Transient empty-art on same URI — hold last-good; speaker
+            // re-publishes can arrive empty briefly during `/getaa?`
+            // proxy refreshes or topology rebuilds.
+            let currentURI = metadata.trackURI ?? metadata.title
+            guard currentURI != priorTrackURI else { return }
+            if pinnedURL(for: metadata) != nil {
+                invalidateArtResolution(for: metadata)
+            }
+            if displayedArtURL != nil {
+                displayedArtURL = nil
+            }
+        }
+
+        searchWebArtIfNeeded(metadata, group: group, dependencies: dependencies)
+        updateDisplayedArt(trackMetadata: metadata, group: group)
+        searchRadioTrackArt(metadata, group: group, dependencies: dependencies)
+    }
+
+    func searchWebArtIfNeeded(_ metadata: TrackMetadata,
+                               group: SonosGroup,
+                               dependencies: Dependencies) {
+        if forceWebArt { return }
+        // Avoids repeated iTunes searches that return different top
+        // hits across calls and visibly flip the cover.
+        if isArtResolved(for: metadata) { return }
+
+        let hasArt = metadata.albumArtURI != nil && !(metadata.albumArtURI?.isEmpty ?? true)
+        let isLocalFile = metadata.trackURI.map(URIPrefix.isLocal) ?? false
+        let hasLocalOnlyArt = hasArt && (metadata.albumArtURI?.contains("/getaa?") ?? false)
+        // Radio's `albumArtURI` is the station logo, not track-specific
+        // art — leave it unpinned so `searchRadioTrackArt` can resolve
+        // the song cover async.
+        let onRadio = !metadata.stationName.isEmpty || metadata.isRadioStream
+        if hasArt && !hasLocalOnlyArt {
+            clearWebArt()
+            if !onRadio,
+               let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
+                markArtResolved(for: metadata, url: url)
+            }
+            return
+        }
+        // Speaker's /getaa? is more reliable than iTunes title match
+        // (avoids "This Christmas" hitting a Toni Braxton album for a
+        // Joe track). Only fall through to iTunes with no art at all.
+        if hasLocalOnlyArt {
+            clearWebArt()
+            if !onRadio,
+               let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
+                markArtResolved(for: metadata, url: url)
+            }
+            return
+        }
+        clearWebArt()
+
+        let searchTerm: String
+        if isLocalFile && !metadata.album.isEmpty {
+            searchTerm = metadata.album
+        } else if !metadata.stationName.isEmpty {
+            searchTerm = metadata.stationName
+        } else if !metadata.album.isEmpty {
+            searchTerm = metadata.album
+        } else if !metadata.title.isEmpty {
+            searchTerm = metadata.title
+        } else {
+            return
+        }
+        let artist = TrackMetadata.filterDeviceID(metadata.artist)
+        let key = "\(searchTerm)|\(artist)"
+        guard shouldSearch(key: key) else { return }
+        setSearchKey(key)
+        setWebArtResult(nil)
+        var cleanedSearchTerm = searchTerm
+            .replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
+        if let p = cleanedSearchTerm.firstIndex(of: "(") { cleanedSearchTerm = String(cleanedSearchTerm[..<p]) }
+        if let b = cleanedSearchTerm.firstIndex(of: "[") { cleanedSearchTerm = String(cleanedSearchTerm[..<b]) }
+        cleanedSearchTerm = cleanedSearchTerm.trimmingCharacters(in: .whitespaces)
+        let effectiveSearch = cleanedSearchTerm.isEmpty ? searchTerm : cleanedSearchTerm
+
+        Task { [weak self, weak dependencies] in
+            guard let self else { return }
+            var foundArt = await self.albumArtSearch.searchArtwork(
+                artist: artist, album: effectiveSearch
+            )
+            if foundArt == nil, !artist.isEmpty {
+                foundArt = await self.albumArtSearch.searchArtwork(
+                    artist: artist, album: ""
+                )
+            }
+            if let artURL = foundArt, let url = URL(string: artURL) {
+                self.playHistoryManager?.updateArtwork(
+                    forTitle: metadata.title, artist: metadata.artist, artURL: artURL
+                )
+                dependencies?.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
+                self.setWebArtResult(url)
+                self.markArtResolved(for: metadata, url: url)
+                self.updateDisplayedArt(trackMetadata: metadata, group: group)
+            } else if !hasLocalOnlyArt {
+                self.setWebArtResult(nil)
+            }
+        }
+    }
+
+    /// Resolves the song cover for radio (where `albumArtURI` is the
+    /// station logo, not the track), into `radioTrackArtURL`.
+    func searchRadioTrackArt(_ metadata: TrackMetadata,
+                              group: SonosGroup,
+                              dependencies: Dependencies) {
+        let transportState = dependencies.groupTransportStates[group.coordinatorID] ?? .stopped
+        guard transportState.isActive else { return }
+
+        if metadata.stationName.isEmpty || metadata.isAdBreak {
+            clearRadioTrackArt()
+            return
+        }
+        // Holds last-good across transient title blips on the same
+        // station instead of flicking back to the logo.
+        if metadata.title.isEmpty || metadata.title == metadata.stationName {
+            return
+        }
+        let key = "\(metadata.title)|\(metadata.artist)"
+        guard shouldSearchRadioTrack(key: key) else { return }
+        setRadioTrackKey(key)
+        if radioStationArtURL == nil, let stationArt = displayedArtURL ?? metadata.albumArtURI.flatMap({ URL(string: $0) }) {
+            radioStationArtURL = stationArt
+        }
+        var artist = TrackMetadata.filterDeviceID(metadata.artist)
+        // Stations sometimes use the station/soundtrack name as the
+        // artist field (e.g. "Movie Ticket Radio" → "Animal House");
+        // dropping that on match yields better iTunes results.
+        if !metadata.stationName.isEmpty,
+           artist.caseInsensitiveCompare(metadata.stationName) == .orderedSame {
+            artist = ""
+        }
+        let searchTitle = metadata.title
+        Task { [weak self, weak dependencies] in
+            guard let self else { return }
+            if let artURL = await self.albumArtSearch.searchRadioTrackArt(
+                artist: artist, title: searchTitle
+            ) {
+                sonosDebugLog("[ART/RADIO] resolved \(searchTitle) – \(artist) → \(artURL.prefix(80))")
+                self.setRadioTrackArt(URL(string: artURL), forKey: key)
+                self.playHistoryManager?.updateArtwork(
+                    forTitle: metadata.title, artist: metadata.artist, artURL: artURL
+                )
+                dependencies?.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
+            } else {
+                sonosDebugLog("[ART/RADIO] no result for \(searchTitle) – \(artist)")
+                self.setRadioTrackArt(nil, forKey: key)
+            }
+        }
+    }
+
     // MARK: - Display Resolution
 
     /// Returns the URL that should be displayed as album art right now.

@@ -43,6 +43,21 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
+## What's New in v4.10
+
+Efficiency and polish release. No new features — many small wins for everyday use.
+
+- **Quieter on the CPU.** Idle CPU dropped from ~70% to single digits with the queue, karaoke, or visualisation visible.
+- **Speaker grouping settles first time.** Adding or removing a speaker from a group no longer briefly reverts before sticking. Less network chatter overall — group state now flows from speaker events instead of repeated polls.
+- **Volume sliders behave.** Dragging a sub-speaker's volume no longer drops the master slider to zero halfway through. The double-click target on the volume number now lands on the digits you can see. Slow speakers no longer make the slider visibly snap back after release.
+- **Album art stays put.** Switching speakers right when a track changes used to leave the now-playing card blank until you forced a refresh. The art now survives the swap.
+- **Album art across the app agrees.** The visualisation, now-playing card, and queue all show the same cover for any given song.
+- **Minor layout tidies.** Play button centred. EQ pop-out lands over the app window instead of the centre of your primary display. Sub-speaker volume numbers right-align with the master.
+
+Full change list in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## What's New in v4.9.2
 
 > **If the in-app Install Update button fails with "An error occurred while launching the installer", download `Choragus.dmg` manually from the [v4.9.2 release page](https://github.com/scottwaters/Choragus/releases/tag/v4.9.2) and drag it into `/Applications` as normal.** This is required for any user upgrading from v4.9 or v4.9.1 — the entitlements bug fixed in v4.9.2 lives inside those installed builds' Sparkle component, so the in-app updater can't fix itself. After this one-time manual install, future auto-updates work.

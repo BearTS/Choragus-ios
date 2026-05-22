@@ -442,6 +442,18 @@ public class SonosManager: ObservableObject {
     private lazy var musicServices = MusicServicesService(soap: soap)
 
     private var discoveredLocations: Set<String> = []  // de-dups SSDP responses
+    /// Device IDs whose first discovery this app session has already
+    /// driven a topology refresh. Distinct from `discoveredLocations`
+    /// (which is cleared every 30 s by the SSDP rescan timer) and from
+    /// `devices` (which is pre-populated from the persisted cache at
+    /// launch, so it can't be used to distinguish "first time this run"
+    /// from "previously cached"). Used to ensure each device's first
+    /// SSDP response per session still triggers a `refreshTopology`
+    /// even when the live response matches the cached snapshot
+    /// byte-for-byte — otherwise the `isUsingCachedData` flag (cleared
+    /// only inside `refreshTopology`) is stranded true and the UI shows
+    /// "Using cached data" indefinitely.
+    private var sessionDiscoveredDeviceIDs: Set<String> = []
 
     /// Tracks per-URI Apple-Music enrichment state so we don't fire
     /// duplicate iTunes lookups on every transport update tick.
@@ -773,11 +785,29 @@ public class SonosManager: ObservableObject {
             // through every @EnvironmentObject observer of SonosManager.
             // Logging gated on the same condition so periodic rediscovery
             // of an unchanged device doesn't flood the debug log.
-            if devices[device.id] != device {
+            let isNewOrChanged = devices[device.id] != device
+            if isNewOrChanged {
                 sonosDebugLog("[DISCOVERY] \(desc.roomName) swGen=\(desc.swGen) softwareVersion=\(desc.softwareVersion) household=\(device.householdID ?? "<nil>")")
                 devices[device.id] = device
             }
-            await refreshTopology(from: device)
+            // Refresh topology when:
+            //  (a) the device is new or has materially changed this run, OR
+            //  (b) we haven't yet refreshed for this device in *this* app
+            //      session (covers the cache-restore case where every
+            //      cached device matches its live SSDP response exactly
+            //      and `isNewOrChanged` is false for all of them —
+            //      without this guard, `refreshTopology` is never
+            //      called, so the `isUsingCachedData` flag it owns
+            //      stays stuck on `true` and event-pipeline state stays
+            //      in cache-restore mode).
+            // Subsequent same-session SSDP responses for an unchanged
+            // device still skip the refresh, preserving the
+            // SSDP-rotation-flap fix that motivated this branch.
+            let isFirstThisSession = !sessionDiscoveredDeviceIDs.contains(device.id)
+            sessionDiscoveredDeviceIDs.insert(device.id)
+            if isNewOrChanged || isFirstThisSession {
+                await refreshTopology(from: device)
+            }
         } catch {
             sonosDebugLog("[DISCOVERY] Device description fetch failed: \(error)")
         }
@@ -1895,8 +1925,10 @@ public class SonosManager: ObservableObject {
     }
 
     public func ungroupDevice(_ device: SonosDevice) async throws {
+        sonosDebugLog("[UNGROUP-START] member=\(device.roomName) id=\(device.id)")
         try await avTransport.becomeCoordinatorOfStandaloneGroup(device: device)
         await refreshTopology(from: device, force: true)
+        sonosDebugLog("[UNGROUP-DONE] member=\(device.roomName)")
     }
 
     // MARK: - Alarms
@@ -3788,11 +3820,29 @@ extension SonosManager: TransportStrategyDelegate {
     /// from any known coordinator. Without this, group/ungroup actions
     /// made from Sonos's app weren't reflected here until the next
     /// 30-second SSDP rescan.
-    public func transportRequestsTopologyRefresh() {
-        guard let device = groups.first?.coordinator ?? devices.values.first else { return }
+    public func transportRequestsTopologyRefresh(originDeviceID: String) {
+        // Prefer the device that fired the topology event — its
+        // self-reported `GetZoneGroupState` is consistent with the change
+        // it just published. Fall back to any known device only if the
+        // originator isn't in our cache yet (newly-discovered speaker
+        // whose first event arrives before SSDP description fetch
+        // completes).
+        let device = devices[originDeviceID]
+            ?? groups.first?.coordinator
+            ?? devices.values.first
+        guard let device else { return }
         Task {
             await refreshTopology(from: device, force: true)
         }
+    }
+
+    public func transportDidObserveQueueChange(_ groupID: String) {
+        // ContentDirectory `Q:0` event fired. Hand off to the same
+        // notification path the optimistic-update sites use so
+        // QueueView's existing `onReceive(.queueChanged)` does the
+        // `Browse(Q:0)` reload. Empty `optimisticItems` ⇒ subscribers
+        // perform a full refresh.
+        postQueueChanged(optimisticItems: [])
     }
 }
 

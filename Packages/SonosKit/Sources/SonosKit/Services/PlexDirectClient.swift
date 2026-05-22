@@ -20,6 +20,7 @@
 /// playback URL handoff) live in their own files and call into this.
 import Foundation
 import Combine
+import Network
 
 // MARK: - Models
 
@@ -56,25 +57,42 @@ public enum PlexBrowseKind {
     case albums
     case tracks
     case childrenOf(ratingKey: String)  // album → tracks, artist → albums
+    /// All audio playlists on the server (smart + manual). Routed to
+    /// `/playlists?playlistType=audio`. Returned items have
+    /// `isContainer = true`; drill via `.playlistItems(rk:)`.
+    case playlists
+    /// Tracks inside a specific playlist, paginated. Routed to
+    /// `/playlists/{rk}/items`.
+    case playlistItems(ratingKey: String)
 }
 
 public struct PlexMediaItem {
     public let ratingKey: String        // unique server-side ID, e.g. "12345"
     public let title: String
-    public let type: String             // "artist", "album", "track"
+    public let type: String             // "artist", "album", "track", "playlist"
     public let parentTitle: String?     // album for tracks, artist for albums
     public let grandparentTitle: String?// artist for tracks
     public let thumb: String?           // path like "/library/metadata/12345/thumb/167..."
-    public let isContainer: Bool        // true for artist/album, false for track
+    public let isContainer: Bool        // true for artist/album/playlist, false for track
     /// Path to the underlying media part — only present on tracks.
     /// Combine with the chosen base URI + auth token for the playback URL.
     public let partKey: String?
     public let durationMs: Int?
+    /// Playlist-only. `true` for smart (rule-driven) playlists, `false`
+    /// for manually-curated ones. UI surfaces a "Smart" tag in the
+    /// subtitle so dynamic playlists are distinguishable.
+    public let smart: Bool?
+    /// Playlist-only. Track count, used in the subtitle.
+    public let leafCount: Int?
+    /// Playlist-only. Composite (mosaic) thumbnail path; some
+    /// playlists set this instead of `thumb`.
+    public let composite: String?
 
     public init(ratingKey: String, title: String, type: String,
                 parentTitle: String?, grandparentTitle: String?,
                 thumb: String?, isContainer: Bool, partKey: String?,
-                durationMs: Int?) {
+                durationMs: Int?,
+                smart: Bool? = nil, leafCount: Int? = nil, composite: String? = nil) {
         self.ratingKey = ratingKey
         self.title = title
         self.type = type
@@ -84,6 +102,9 @@ public struct PlexMediaItem {
         self.isContainer = isContainer
         self.partKey = partKey
         self.durationMs = durationMs
+        self.smart = smart
+        self.leafCount = leafCount
+        self.composite = composite
     }
 }
 
@@ -309,6 +330,8 @@ public final class PlexDirectClient: Sendable {
         case .albums:                        path = "/library/sections/\(sectionID)/all?type=9"
         case .tracks:                        path = "/library/sections/\(sectionID)/all?type=10"
         case .childrenOf(let ratingKey):     path = "/library/metadata/\(ratingKey)/children"
+        case .playlists:                     path = "/playlists?playlistType=audio"
+        case .playlistItems(let rk):         path = "/playlists/\(rk)/items"
         }
         let url = "\(path)\(path.contains("?") ? "&" : "?")X-Plex-Container-Start=\(offset)&X-Plex-Container-Size=\(limit)"
         return try await getMediaList(baseURI: baseURI, path: url, authToken: authToken)
@@ -348,6 +371,32 @@ public final class PlexDirectClient: Sendable {
             sonosDiagLog(.warning, tag: "PLEX",
                          "transientToken endpoint refused — falling back to long-lived token: \(error.localizedDescription)")
             return authToken
+        }
+    }
+
+    /// Hits `/identity` on the cached `baseURI` with a short timeout to
+    /// verify it's still reachable. Used by `PlexAuthManager.ensureBaseURI`
+    /// to catch stale URIs (Plex hands out LAN URLs on the LAN and
+    /// public URLs when remote — a cached URL from one network is
+    /// useless on the other). Returns `true` if PMS answered within
+    /// the timeout, `false` for any error (network, HTTP, parse).
+    /// Never throws — callers branch on the bool.
+    public func probeIdentity(baseURI: String, timeout: TimeInterval = 2.0) async -> Bool {
+        guard let url = URL(string: "\(baseURI)/identity") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        for (k, v) in plexHeaders() { request.setValue(v, forHTTPHeaderField: k) }
+        // /identity is unauthenticated — no token needed; reachability
+        // is the only thing being checked. Auth happens on subsequent
+        // browse calls.
+        do {
+            let (_, resp) = try await session.data(for: request)
+            if let http = resp as? HTTPURLResponse {
+                return (200...299).contains(http.statusCode)
+            }
+            return false
+        } catch {
+            return false
         }
     }
 
@@ -405,6 +454,14 @@ public final class PlexDirectClient: Sendable {
         let part = (media?["Part"] as? [[String: Any]])?.first
         let partKey = part?["key"] as? String
         let durationMs = (dict["duration"] as? Int) ?? (media?["duration"] as? Int)
+        // Playlist-only fields. Plex serialises `smart` as `1` / `0`
+        // (not a JSON boolean) — coerce both forms so we don't depend
+        // on the server version's quirks.
+        let smart: Bool? = {
+            if let b = dict["smart"] as? Bool { return b }
+            if let i = dict["smart"] as? Int { return i != 0 }
+            return nil
+        }()
         return PlexMediaItem(
             ratingKey: ratingKey,
             title: title,
@@ -414,7 +471,10 @@ public final class PlexDirectClient: Sendable {
             thumb: dict["thumb"] as? String,
             isContainer: isContainer,
             partKey: partKey,
-            durationMs: durationMs
+            durationMs: durationMs,
+            smart: smart,
+            leafCount: dict["leafCount"] as? Int,
+            composite: dict["composite"] as? String
         )
     }
 }
@@ -452,6 +512,18 @@ public final class PlexAuthManager: ObservableObject {
     private static let baseURIKey = "plex.direct.baseURI"
     private static let serverNameKey = "plex.direct.serverName"
 
+    /// Monitors LAN connectivity. Plex hands out a LAN URL when the
+    /// device is on the same network as PMS and a public URL when
+    /// remote; the cached `baseURI` from one network is broken on the
+    /// other (LAN URL unreachable from remote → Sonos silently
+    /// skip-advances; public URL works on LAN but adds latency).
+    /// Invalidating the cache on path change lets the next browse
+    /// call refresh via `pickReachableConnection` against the new
+    /// network's path set.
+    private var pathMonitor: NWPathMonitor?
+    private var lastPathSignature: String = ""
+    private let pathQueue = DispatchQueue(label: "com.choragus.plex.pathmonitor")
+
     private init() {
         // Default the "prefer direct" toggle to true on first launch —
         // direct is the better experience when it works, and we let the
@@ -465,6 +537,54 @@ public final class PlexAuthManager: ObservableObject {
         }
         self.baseURI = UserDefaults.standard.string(forKey: Self.baseURIKey) ?? ""
         self.serverName = UserDefaults.standard.string(forKey: Self.serverNameKey) ?? ""
+        startPathMonitor()
+    }
+
+    deinit {
+        pathMonitor?.cancel()
+    }
+
+    /// Starts an `NWPathMonitor` that fires on connectivity changes
+    /// (WiFi join/leave, ethernet plug, VPN up/down). On every change
+    /// where the path signature differs from the last seen one, the
+    /// cached `baseURI` is invalidated so the next `ensureBaseURI`
+    /// call re-discovers against the current network. The signature
+    /// folds together status + interfaceType so a Wi-Fi → Wi-Fi roam
+    /// to a different SSID does NOT trigger invalidation (path
+    /// updates fire on transient signal events as well; only true
+    /// interface-class transitions get treated as roams here).
+    private func startPathMonitor() {
+        guard pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            let iface = path.availableInterfaces.first.map { String(describing: $0.type) } ?? "none"
+            let sig = "\(path.status)|\(iface)"
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.lastPathSignature.isEmpty {
+                    self.lastPathSignature = sig
+                    return
+                }
+                if sig != self.lastPathSignature {
+                    sonosDiagLog(.info, tag: "PLEX",
+                                 "Network path changed — invalidating cached baseURI",
+                                 context: ["previous": self.lastPathSignature, "current": sig])
+                    self.lastPathSignature = sig
+                    self.invalidateBaseURI()
+                }
+            }
+        }
+        monitor.start(queue: pathQueue)
+        self.pathMonitor = monitor
+    }
+
+    /// Drops the cached baseURI without clearing the auth token. Next
+    /// `ensureBaseURI()` triggers a fresh `pickReachableConnection`
+    /// over the current network's path set.
+    private func invalidateBaseURI() {
+        self.baseURI = ""
+        UserDefaults.standard.removeObject(forKey: Self.baseURIKey)
     }
 
     // MARK: - PIN flow
@@ -598,10 +718,51 @@ public final class PlexAuthManager: ObservableObject {
         throw PlexError.noServersFound
     }
 
+    /// Runs `body(baseURI, authToken)` with the current cached URI. On
+    /// a network-ish failure (`PlexError.networkError`, `httpError`,
+    /// `parseError`), refreshes the server discovery once and retries.
+    /// Used by every browse / play / lookup call so transient blips
+    /// (roaming mid-action, PMS DHCP renewal, brief packet loss)
+    /// recover silently — the user-visible "Couldn't reach your Plex
+    /// server" banner only surfaces if both attempts genuinely fail.
+    public func withRetry<T>(_ body: (_ baseURI: String, _ authToken: String) async throws -> T) async throws -> T {
+        let token = self.authToken
+        guard !token.isEmpty else { throw PlexError.notAuthenticated }
+        let firstURI = try await ensureBaseURI()
+        do {
+            return try await body(firstURI, token)
+        } catch let error as PlexError {
+            switch error {
+            case .networkError, .httpError, .parseError:
+                sonosDiagLog(.info, tag: "PLEX",
+                             "Plex call failed; refreshing server and retrying once",
+                             context: ["error": error.localizedDescription])
+                invalidateBaseURI()
+                let secondURI = try await refreshServer()
+                return try await body(secondURI, token)
+            default:
+                throw error
+            }
+        }
+    }
+
     /// Returns a base URI guaranteed to have responded recently. If the
-    /// cached one is empty or stale, kicks off discovery.
+    /// cached one is empty, kicks off discovery. If a cached one
+    /// exists, probes `/identity` with a 2-second timeout first —
+    /// catches the "cached LAN URL on a remote network" stale-cache
+    /// case before the URI is handed to Sonos (which would silently
+    /// skip-advance through every track). On probe failure the cache
+    /// is invalidated and discovery runs.
     public func ensureBaseURI() async throws -> String {
-        if !baseURI.isEmpty { return baseURI }
+        if !baseURI.isEmpty {
+            if await client.probeIdentity(baseURI: baseURI, timeout: 2.0) {
+                return baseURI
+            }
+            sonosDiagLog(.info, tag: "PLEX",
+                         "Cached baseURI failed /identity probe — refreshing",
+                         context: ["stale_uri": baseURI])
+            invalidateBaseURI()
+        }
         return try await refreshServer()
     }
 }

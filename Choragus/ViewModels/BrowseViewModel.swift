@@ -32,6 +32,12 @@ final class BrowseViewModel {
     /// this guard, a quick scroll past the threshold sends N concurrent
     /// requests and produces duplicate rows when they all return.
     var isLoadingMore = false
+    /// Set once a page returns zero items — the only authoritative
+    /// terminator. SMAPI's reported `total` is unreliable for Spotify
+    /// (often matches the first-page count even when the playlist has
+    /// hundreds of tracks), so gating loadMore on `loadedCount < total`
+    /// silently truncates the list. Reset on every fresh load.
+    var reachedEnd = false
     var errorMessage: String?
     var selectedFilter: String?
     var playbackError: String?
@@ -138,6 +144,7 @@ final class BrowseViewModel {
     func loadItems() async {
         isLoading = true
         errorMessage = nil
+        reachedEnd = false
         do {
             if isSMAPI {
                 try await loadSMAPIItems()
@@ -202,9 +209,9 @@ final class BrowseViewModel {
     ///   initial load, no pagination concept; bails early.
     /// - **Default UPnP browse** → speaker `browse(start: loadedCount)`.
     func loadMore() async {
-        guard !isLoadingMore else { return }
-        guard loadedCount < totalItems else { return }
-        guard !isSearch, !isServiceSearch else { return }
+        if isLoadingMore { return }
+        if reachedEnd { return }
+        if isSearch || isServiceSearch { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
 
@@ -228,16 +235,25 @@ final class BrowseViewModel {
                 let mapped = result.items.map {
                     ServiceSearchProvider.shared.smapiItemToBrowseItem($0, serviceID: sid, sn: sn)
                 }
-                items.append(contentsOf: mapped)
-                loadedCount = items.count
-                if result.total > totalItems { totalItems = result.total }
+                if mapped.isEmpty {
+                    reachedEnd = true
+                } else {
+                    items.append(contentsOf: mapped)
+                    loadedCount = items.count
+                    if result.total > totalItems { totalItems = result.total }
+                }
             } else {
                 let (result, total) = try await sonosManager.browse(objectID: objectID, start: loadedCount, count: pageSize)
-                items.append(contentsOf: result)
-                loadedCount += result.count
-                if total > totalItems { totalItems = total }
+                if result.isEmpty {
+                    reachedEnd = true
+                } else {
+                    items.append(contentsOf: result)
+                    loadedCount += result.count
+                    if total > totalItems { totalItems = total }
+                }
             }
         } catch {
+            sonosDebugLog("[BROWSE] loadMore threw: \(error)")
             ErrorHandler.shared.handle(error, context: "BROWSE")
         }
     }

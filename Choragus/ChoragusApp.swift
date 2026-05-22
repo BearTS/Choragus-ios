@@ -90,6 +90,7 @@ struct ChoragusApp: App {
     /// MainActor-isolated holders so the SwiftUI environment can carry
     /// non-ObservableObject types without ceremony.
     @StateObject private var metadataServicesHolder = MetadataServicesHolder()
+    @StateObject private var artCoordinatorHolder = ArtCoordinatorHolder()
 
     /// Sparkle 2 observer. Started only on builds whose `Info.plist`
     /// has been release-signed with a non-empty `SUFeedURL`. Dev / fork
@@ -115,6 +116,7 @@ struct ChoragusApp: App {
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).lyrics)
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).metadata)
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).lyricsCoordinator)
+                .environmentObject(artCoordinatorHolder.ensureReady(sonosManager: sonosManager, playHistory: playHistoryManager))
                 .environmentObject(sparkleObserver)
                 .onAppear {
                     // Expose the live managers to AppIntents (Shortcuts /
@@ -206,6 +208,8 @@ struct ChoragusApp: App {
                     WindowManager.shared.metadataServicesHolder = metadataServicesHolder
                         .ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager)
                         .metadata
+                    WindowManager.shared.artCoordinator = artCoordinatorHolder
+                        .ensureReady(sonosManager: sonosManager, playHistory: playHistoryManager)
                     WindowManager.shared.colorScheme = colorScheme
                     // Sparkle (when active) handles its own scheduled
                     // checks via `SUEnableAutomaticChecks` /
@@ -290,6 +294,7 @@ struct ChoragusApp: App {
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).lyrics)
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).metadata)
                 .environmentObject(metadataServicesHolder.ensureReady(lastfm: lastFMScrobbler, sonosManager: sonosManager).lyricsCoordinator)
+                .environmentObject(artCoordinatorHolder.ensureReady(sonosManager: sonosManager, playHistory: playHistoryManager))
                 .environmentObject(sparkleObserver)
                 .preferredColorScheme(colorScheme)
         }

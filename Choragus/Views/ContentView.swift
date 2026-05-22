@@ -13,6 +13,7 @@ struct ContentView: View {
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var smapiManager: SMAPIAuthManager
     @EnvironmentObject var plexAuth: PlexAuthManager
+    @EnvironmentObject var artCoordinator: ArtCoordinator
     @ObservedObject private var localNetworkMonitor = LocalNetworkPermissionMonitor.shared
     /// Forces the entire window subtree to re-render when the user
     /// changes the app language in Settings. `L10n.tr(...)` reads
@@ -319,7 +320,7 @@ struct ContentView: View {
                                     )
                             }
 
-                            NowPlayingView(group: group, sonosManager: sonosManager, playHistoryManager: playHistoryManager)
+                            NowPlayingView(group: group, sonosManager: sonosManager, artCoordinator: artCoordinator)
                                 .frame(width: sizes.nowPlaying)
 
                             if showQueue {

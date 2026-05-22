@@ -97,6 +97,9 @@ struct SonosRadioSearchView: View {
                 Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
             }
         }
+        #if DEBUG
+        AddToTestFixturesMenuItem(item: item)
+        #endif
     }
 
     private func performSearch() {

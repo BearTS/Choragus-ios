@@ -16,10 +16,13 @@ import SonosKit
 final class MainThreadHeartbeat: @unchecked Sendable {
     static let shared = MainThreadHeartbeat()
 
-    /// 10 ms cadence gives ~3 samples per missed 60 Hz frame, enough
-    /// resolution to catch the 75 ms blocks the karaoke-frame probe
-    /// has been recording without flooding the log.
-    private let pulseInterval: DispatchTimeInterval = .milliseconds(10)
+    /// 100 ms cadence. Below this the probe itself drives so many
+    /// main-queue wake-ups that CA::Transaction observers fire on
+    /// every cycle, inflating the very CPU usage the probe is meant
+    /// to measure. 100 ms still catches the 50 ms+ stalls flagged by
+    /// `stallThresholdMs` — a stall longer than 100 ms surfaces on the
+    /// next pulse with full magnitude.
+    private let pulseInterval: DispatchTimeInterval = .milliseconds(100)
     /// Below this we'd see noise from normal scheduler jitter
     /// (~16-25 ms when main is busy laying out a frame). 50 ms is
     /// already 3 missed v-syncs — anything above is a real stall.

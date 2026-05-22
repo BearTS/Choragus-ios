@@ -537,12 +537,10 @@ struct DiagnosticsView: View {
     /// preview matches what `submitEncryptedReport` actually writes
     /// into the encrypted body. Earlier this used `bundleTextWithPayload`
     /// (no public scrub) while the bundle itself was also unscrubbed —
-    /// the user saw an honest-but-leaky preview, and the bundle leaked
-    /// `sn=`, LAN IPs, and home paths despite the bundle's
-    /// "encrypted-to-the-maintainer" framing implying minimisation.
-    /// Now both paths apply `scrubForPublicOutput`, and the redaction
-    /// summary at the bottom of the preview reflects the actual on-wire
-    /// content.
+    /// the preview matched the wire content but both still leaked
+    /// `sn=`, LAN IPs, and home paths despite the "encrypted-to-the-
+    /// maintainer" framing implying minimisation. Now both paths apply
+    /// `scrubForPublicOutput`.
     private func presentEncryptedReportPreview(target: EncryptedReportTarget) {
         let rows = selection.isEmpty
             ? filteredEntries

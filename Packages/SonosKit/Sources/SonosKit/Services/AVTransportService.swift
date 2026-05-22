@@ -107,16 +107,31 @@ public final class AVTransportService {
 
         if let didl = result["TrackMetaData"], !didl.isEmpty,
            didl != "NOT_IMPLEMENTED" {
-            // Base DIDL extraction (title, artist, album, art)
-            metadata.enrichFromDIDL(didl, device: device)
-
-            // Radio/stream-specific: parse r:streamContent for current track info
-            let parsed = XMLResponseParser.parseDIDLMetadata(didl)
-            // Fallback: if streamContent is empty (bare & breaks XML parser), extract with string matching
-            let streamContent: String? = {
-                if let sc = parsed?.streamContent, !sc.isEmpty { return sc }
-                return XMLResponseParser.extractStreamContent(didl)
-            }()
+            // DIDL parsing + enrichment moved off the caller's actor.
+            // The two parses below run `NSXMLParser` synchronously on
+            // strings that can be several KB; on the @MainActor caller
+            // this added 3–6 ms per position-info poll to the main
+            // thread. `Task.detached` hops the work to the cooperative
+            // pool. Inputs are value types; result is returned as a
+            // Sendable tuple.
+            let didlInput = didl
+            let baseMetadata = metadata
+            let device = device
+            let (enriched, parsedDIDL, streamContent) =
+                await Task.detached(priority: .userInitiated) {
+                    var m = baseMetadata
+                    m.enrichFromDIDL(didlInput, device: device)
+                    let parsed = XMLResponseParser.parseDIDLMetadata(didlInput)
+                    let extracted: String?
+                    if let sc = parsed?.streamContent, !sc.isEmpty {
+                        extracted = sc
+                    } else {
+                        extracted = XMLResponseParser.extractStreamContent(didlInput)
+                    }
+                    return (m, parsed, extracted)
+                }.value
+            metadata = enriched
+            let parsed = parsedDIDL
             let trackURI = result["TrackURI"] ?? ""
             let isRadio = URIPrefix.isRadio(trackURI) ||
                           trackURI.hasSuffix(".m3u8") || trackURI.hasSuffix(".pls")

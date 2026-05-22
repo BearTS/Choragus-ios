@@ -454,8 +454,8 @@ public final class MusicMetadataService: ArtistInfoProvider {
 
     // MARK: - Wikipedia
 
-    /// Wikipedia REST summary endpoint. Free, no key, very fast,
-    /// excellent prose. Two-step lookup: OpenSearch finds the best
+    /// Wikipedia REST summary endpoint. Free, no key, low latency,
+    /// curated prose. Two-step lookup: OpenSearch finds the best
     /// title match (handles disambiguations and minor name variants),
     /// then the summary endpoint returns the article extract.
     private func wikipediaArtist(name: String) async -> ArtistInfo? {

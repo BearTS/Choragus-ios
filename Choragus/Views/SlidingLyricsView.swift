@@ -2,18 +2,25 @@
 /// both the inline panel and the popout karaoke window can size it
 /// without forking the implementation.
 ///
+/// Render path: a single `Canvas` drawn inside a `TimelineView(.animation)`.
+/// `Canvas` is a leaf to SwiftUI's diff, so the display-refresh redraw
+/// repaints straight into a `GraphicsContext` without re-evaluating any
+/// surrounding view tree. The earlier `VStack { ForEach { Text } }` body
+/// re-built its subtree per frame, which cascaded `ViewGraph.updateOutputs`
+/// into the surrounding `ScrollView` and put the main thread into a
+/// continuous `_layoutSubtreeWithOldSize` loop (~30–50% main-thread CPU
+/// while lyrics were visible).
+///
 /// Per-frame budget on the render thread:
-/// - Tight visible slice (`visibleRows + 2·bufferRows` rows) so long
-///   LRCs can't blow up the view tree.
-/// - Per-row `.compositingGroup()` so each line is flattened to a
-///   single CALayer; `scaleEffect` and `opacity` then become pure GPU
-///   transforms, not re-rasterisations.
+/// - Visible slice (`visibleRows + 2·bufferRows` rows) so long LRCs
+///   never materialise more than ~9 resolved-text objects per tick.
+/// - Per-row scale + opacity applied via `GraphicsContext.drawLayer`,
+///   i.e. a transform on the rendering pipeline, not a SwiftUI modifier.
 /// - `Equatable` short-circuit so parent re-renders (track metadata
 ///   updates, volume changes, etc.) don't tear down and rebuild the
 ///   `TimelineView` — only meaningful input changes do.
-/// - Per-row opacity falloff replaces a wrap-the-stack `.mask()` so
-///   we avoid the offscreen compositing pass that mask used to force
-///   on every TimelineView tick.
+/// - Fixed-height outer frame (`height: windowHeight`) so the Canvas's
+///   intrinsic size can't fluctuate and pull the parent into layout.
 import SwiftUI
 import SonosKit
 
@@ -71,46 +78,79 @@ struct SlidingLyricsView: View, Equatable {
     var body: some View {
         let windowHeight = CGFloat(visibleRows) * rowHeight
         TimelineView(.animation) { context in
-            // `fractionalIndex` itself bakes in the per-line centre
-            // lead from the karaoke model — no global offset needed.
-            let live = anchor.projected(at: context.date) + offset
-            let liveFractional = fractionalIndex(for: live)
-            let halfWindow = centreRow + bufferRows
-            let lineCount = lines.count
-            // Clamp `active` into [0, lineCount-1]. Pre-roll path in
-            // `fractionalIndex` returns unbounded negatives when a stale
-            // manual offset is applied across a track change; without the
-            // clamp `hi` could go negative and `lo..<hi` would trap.
-            let activeRaw = Int(liveFractional.rounded())
-            let active = lineCount > 0 ? max(0, min(lineCount - 1, activeRaw)) : 0
-            let lo = max(0, active - halfWindow)
-            let hi = max(lo, min(lineCount, active + halfWindow + 1))
-            let yOffset = CGFloat(Double(centreRow) - (liveFractional - Double(lo))) * rowHeight
-            VStack(spacing: 0) {
-                // `Array(lo..<hi)` materialises the range so SwiftUI's
-                // ForEach diff sees a stable identifier set across track
-                // changes — `ForEach(Range, id:\.self)` reuses indices
-                // from a prior evaluation against the new (shorter)
-                // `lines` for one frame and traps on subscript.
-                ForEach(Array(lo..<hi), id: \.self) { index in
-                    if index < lines.count {
-                        lyricLine(
-                            lines[index].line,
-                            distance: abs(Double(index) - liveFractional)
-                        )
-                        .frame(height: rowHeight)
+            Canvas(opaque: false, rendersAsynchronously: false) { ctx, size in
+                // `fractionalIndex` itself bakes in the per-line centre
+                // lead from the karaoke model — no global offset needed.
+                let live = anchor.projected(at: context.date) + offset
+                let liveFractional = fractionalIndex(for: live)
+                let halfWindow = centreRow + bufferRows
+                let lineCount = lines.count
+                guard lineCount > 0 else { return }
+                // Clamp `active` into [0, lineCount-1]. Pre-roll path in
+                // `fractionalIndex` returns unbounded negatives when a
+                // stale manual offset is applied across a track change.
+                let activeRaw = Int(liveFractional.rounded())
+                let active = max(0, min(lineCount - 1, activeRaw))
+                let lo = max(0, active - halfWindow)
+                let hi = max(lo, min(lineCount, active + halfWindow + 1))
+                // Centre of the row that holds `liveFractional` lands at
+                // `centreRow * rowHeight + rowHeight/2`.
+                let centreY = CGFloat(centreRow) * rowHeight + rowHeight / 2
+                let centreX = size.width / 2
+                // Horizontal slack for shrink-to-fit (mirrors the
+                // previous `.padding(.horizontal, 16)` + `.minimumScaleFactor(0.3)`).
+                let availableWidth = max(size.width - 32, 1)
+                let minFitScale: CGFloat = 0.3
+                let minScale = baseSize / peakSize
+
+                for index in lo..<hi {
+                    guard index < lineCount else { continue }
+                    let distance = abs(Double(index) - liveFractional)
+                    let clamped = min(max(distance, 0), 2.5)
+                    let t = 1.0 - (clamped / 2.5)
+                    let scale: CGFloat
+                    switch style {
+                    case .dynamic:
+                        scale = minScale + (1.0 - minScale) * CGFloat(t)
+                    case .classic:
+                        scale = 1.0
+                    }
+                    let opacity = t * t
+
+                    let rowY = centreY + CGFloat(Double(index) - liveFractional) * rowHeight
+                    // Cull rows whose centre is outside the visible band;
+                    // bufferRows already keep one row of pre-roll above
+                    // and below for the scale-in animation.
+                    if rowY < -rowHeight || rowY > size.height + rowHeight { continue }
+
+                    let text = Text(lines[index].line)
+                        .font(.system(size: peakSize, weight: .semibold))
+                        .foregroundColor(.primary)
+                    let resolved = ctx.resolve(text)
+                    let measured = resolved.measure(in: CGSize(
+                        width: .greatestFiniteMagnitude,
+                        height: rowHeight
+                    ))
+                    let widthFit = min(1.0, availableWidth / max(measured.width, 1))
+                    let fitScale = max(widthFit, minFitScale)
+
+                    ctx.drawLayer { layer in
+                        layer.opacity *= opacity
+                        layer.translateBy(x: centreX, y: rowY)
+                        layer.scaleBy(x: scale * fitScale, y: scale * fitScale)
+                        layer.draw(resolved, at: .zero, anchor: .center)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .offset(y: yOffset)
-            .frame(maxWidth: .infinity, maxHeight: windowHeight, alignment: .top)
-            .clipped()
-            // Strip any inherited animation context from the per-frame
-            // body so VStack offset jumps and ForEach insert/remove on
-            // line transitions can't pick up SwiftUI's default ~0.25 s
-            // implicit interpolation and fight the TimelineView motion.
-            .transaction { $0.animation = nil }
+            // Fixed height — previous `.frame(maxHeight: windowHeight)`
+            // let intrinsic content negotiate, which fluctuated per tick
+            // as the visible-row window shifted and pulled the parent
+            // ScrollView into a `_layoutSubtreeWithOldSize` loop.
+            .frame(maxWidth: .infinity,
+                   minHeight: windowHeight,
+                   maxHeight: windowHeight,
+                   alignment: .top)
+            .allowsHitTesting(false)
         }
     }
 
@@ -155,52 +195,6 @@ struct SlidingLyricsView: View, Equatable {
         return Double(prevIdx) + min(max(progress, 0), 1)
     }
 
-    @ViewBuilder
-    private func lyricLine(_ text: String, distance: Double) -> some View {
-        // Centre row at full opacity; rows ≥ 2.5 lines from centre fade
-        // to 0. The per-row falloff replaces a `.mask()` LinearGradient
-        // wrap that forced an offscreen compositing pass each frame.
-        let clamped = min(max(distance, 0), 2.5)
-        let t = 1.0 - (clamped / 2.5)
-        // Classic style holds every visible line at `peakSize` — no
-        // scale interpolation — and leans entirely on the opacity
-        // gradient to mark the active row. Matches the traditional
-        // karaoke presentation. Dynamic style keeps the existing
-        // peak-to-base size interpolation. Wrapped in a closure so
-        // the `switch` reads as control flow, not a SwiftUI
-        // `@ViewBuilder` branch.
-        let scale: CGFloat = {
-            switch style {
-            case .dynamic:
-                let minScale = baseSize / peakSize
-                return minScale + (1.0 - minScale) * CGFloat(t)
-            case .classic:
-                return 1.0
-            }
-        }()
-        let opacity = CGFloat(t * t)
-
-        Text(text)
-            .font(.system(size: peakSize, weight: .semibold))
-            .foregroundStyle(Color.primary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity)
-            .lineLimit(1)
-            // Long lines shrink to fit width instead of truncating "…".
-            .minimumScaleFactor(0.3)
-            .padding(.horizontal, 16)
-            // `.compositingGroup()` flattens the row before applying the
-            // per-frame transforms so scale/opacity touch one CALayer
-            // on the render thread instead of walking the SwiftUI tree.
-            .compositingGroup()
-            .scaleEffect(scale)
-            .opacity(opacity)
-            // Suppress SwiftUI's default ~0.25 s implicit interpolation
-            // — the TimelineView already provides smooth motion.
-            .animation(nil, value: scale)
-            .animation(nil, value: opacity)
-            .allowsHitTesting(false)
-    }
 }
 
 /// Equatable wrapper for synced-LRC entries so `SlidingLyricsView` can

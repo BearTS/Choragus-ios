@@ -29,6 +29,32 @@ public struct RenderingControlEventData {
     public var loudness: Bool?
 }
 
+/// Parsed evented state from a `ContentDirectory:1` NOTIFY.
+///
+/// Unlike `AVTransport` / `RenderingControl`, ContentDirectory does not
+/// wrap its state in a `<LastChange>` element — its evented variables
+/// sit directly under `<e:property>`. The two we care about:
+/// - `SystemUpdateID`: monotonic counter; any value change means *some*
+///   container in the directory mutated.
+/// - `ContainerUpdateIDs`: comma-separated `containerID,updateID` pairs
+///   identifying which containers changed (`Q:0` = current queue,
+///   `SQ:` = saved queues / Sonos playlists, `R:0/0` = favorites,
+///   `A:*` = music library subtrees).
+public struct ContentDirectoryEventData {
+    public var systemUpdateID: Int?
+    public var containerUpdates: [ContainerUpdate] = []
+
+    public struct ContainerUpdate: Equatable, Sendable {
+        public let containerID: String
+        public let updateID: Int
+    }
+
+    /// True if `containerUpdates` mentions the current playback queue.
+    public var queueChanged: Bool {
+        containerUpdates.contains(where: { $0.containerID == "Q:0" })
+    }
+}
+
 // MARK: - Parser
 
 public enum LastChangeParser {
@@ -103,6 +129,43 @@ public enum LastChangeParser {
         guard let zoneGroupState = values["ZoneGroupState"] else { return nil }
         // The ZoneGroupState is further XML-escaped inside the event
         return XMLResponseParser.parseZoneGroupState(zoneGroupState)
+    }
+
+    /// Parses a `ContentDirectory:1` event NOTIFY body. The body holds
+    /// a flat `<e:propertyset>` whose `<e:property>` children carry
+    /// directly-named evented state variables — there is no
+    /// `<LastChange>` wrapper, so the AVTransport/RenderingControl
+    /// `parsePropertySet` path does not apply.
+    public static func parseContentDirectoryEvent(_ xml: String) -> ContentDirectoryEventData {
+        var event = ContentDirectoryEventData()
+
+        if let systemRaw = extractElement("SystemUpdateID", from: xml),
+           let n = Int(systemRaw.trimmingCharacters(in: .whitespaces)) {
+            event.systemUpdateID = n
+        }
+
+        if let raw = extractElement("ContainerUpdateIDs", from: xml) {
+            // Format: `containerID,updateID,containerID,updateID,...`
+            // (e.g. `Q:0,17,SQ:,3`). Pairs are parsed by walking the
+            // comma-separated list two tokens at a time. Malformed
+            // tails are ignored so a half-pair can't trap.
+            let tokens = raw
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .components(separatedBy: ",")
+            var i = 0
+            while i + 1 < tokens.count {
+                let containerID = tokens[i].trimmingCharacters(in: .whitespaces)
+                let updateIDStr = tokens[i + 1].trimmingCharacters(in: .whitespaces)
+                if !containerID.isEmpty, let updateID = Int(updateIDStr) {
+                    event.containerUpdates.append(
+                        .init(containerID: containerID, updateID: updateID)
+                    )
+                }
+                i += 2
+            }
+        }
+
+        return event
     }
 
     // MARK: - Private Helpers

@@ -170,9 +170,23 @@ public enum Timing {
     public static let toastDismiss: TimeInterval = 2
     public static let statusMessageDismiss: TimeInterval = 3
     public static let subscriptionRenewalCheck: TimeInterval = 60
+    /// `HybridEventFirstTransport` reconciliation safety-net cadence.
+    /// Reverted to 15 s after a 60 s setting coincided with an episode
+    /// where AVTransport / ContentDirectory event delivery silently
+    /// stalled for ~14 minutes — events stopped flowing and the longer
+    /// reconciliation interval no longer masked the gap quickly enough
+    /// to be invisible. Until the underlying event-flow issue is
+    /// understood the safety net stays tight.
     public static let reconciliationPolling: TimeInterval = 15
     public static let legacyPolling: TimeInterval = 5
-    public static let metadataPolling: UInt64 = 5_000_000_000
+    /// Cadence of the active-group position rebase poll driven by
+    /// `NowPlayingViewModel`. Position is excluded from AVTransport
+    /// `LastChange` events (would be too chatty for SUBSCRIBE), so
+    /// the visible seek bar / time text needs a periodic SOAP rebase
+    /// to keep wall-clock projection within the 2 s forward-drift
+    /// threshold and prevent visible "jumps" when reconciliation
+    /// eventually catches up.
+    public static let activePositionPolling: TimeInterval = 2
     public static let musicServicesRetryDelay: TimeInterval = 3
     public static let groupRefreshDelay: TimeInterval = 1
     public static let searchDebounce: UInt64 = 300_000_000

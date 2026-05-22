@@ -317,17 +317,10 @@ private struct HouseholdSection {
 
 /// Animated sound waves that gently pulse opacity
 private struct AnimatedSoundWaves: View {
-    @State private var pulse = false
-
     var body: some View {
         SoundWaves()
             .stroke(style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-            .foregroundStyle(.primary.opacity(pulse ? 0.8 : 0.35))
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                    pulse = true
-                }
-            }
+            .foregroundStyle(.primary.opacity(0.6))
     }
 }
 

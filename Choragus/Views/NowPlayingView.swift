@@ -32,9 +32,13 @@ struct NowPlayingView: View {
     @State private var showShuffleHint = false
     let group: SonosGroup
 
-    init(group: SonosGroup, sonosManager: SonosManager, playHistoryManager: PlayHistoryManager? = nil) {
+    init(group: SonosGroup, sonosManager: SonosManager, artCoordinator: ArtCoordinator) {
         self.group = group
-        _vm = State(wrappedValue: NowPlayingViewModel(sonosManager: sonosManager, group: group, playHistoryManager: playHistoryManager))
+        _vm = State(wrappedValue: NowPlayingViewModel(
+            sonosManager: sonosManager,
+            group: group,
+            artCoordinator: artCoordinator
+        ))
     }
 
     // Convenience accessors from ViewModel
@@ -160,20 +164,28 @@ struct NowPlayingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .tint(sonosManager.resolvedAccentColor)
-        .onAppear { startProgressTimer() }
-        // `.task(id:)` replaces the previous `Task { await fetchCurrentState() }`
-        // dance: it fires on appear AND whenever the group changes, and
-        // auto-cancels when the view goes away — so navigating during a
-        // slow fetch no longer leaks the in-flight work.
+        // AVTransport `LastChange` events deliberately exclude
+        // `RelativeTimePosition`, so seek-bar position needs a poll.
         .task(id: group.id) {
             await fetchCurrentState()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Timing.activePositionPolling))
+                guard !Task.isCancelled else { return }
+                await vm.pollActivePosition()
+            }
         }
-        .onDisappear { stopProgressTimer() }
         .onChange(of: group.id) {
             vm.group = group
-            vm.art.reset()
+            // No `vm.art.reset()` — resolvers live in the shared
+            // `ArtCoordinator` registry and their state IS the per-
+            // group art memory. Resetting the destination resolver
+            // wipes its `displayedArtURL` and the coordinator's
+            // dedup gate then prevents a re-fire until the next
+            // track change, stranding the hero with the default icon.
             vm.resetForGroupChange()
-            startProgressTimer()
+        }
+        .onChange(of: group.members.map(\.id)) {
+            vm.group = group
         }
         // Volume / mute / track-metadata views read directly from
         // `sonosManager` via the VM's computed properties, so the prior
@@ -432,10 +444,27 @@ struct NowPlayingView: View {
                             .controlSize(.small)
 
                             Button {
-                                if sonosManager.htSatChannelMaps[group.coordinatorID] != nil {
-                                    WindowManager.shared.openHomeTheaterEQ()
-                                } else {
-                                    showEQ = true
+                                // Read `htSatChannelMaps` authoritatively
+                                // from the speaker on each click rather
+                                // than trusting whatever the last
+                                // topology refresh happened to leave
+                                // cached. The map drifts across topology
+                                // changes / regrouping / sub-add/remove,
+                                // and a stale read here was sending the
+                                // user into the surround-sound EQ for a
+                                // stereo speaker (or vice-versa). One
+                                // `GetZoneGroupState` SOAP per click is
+                                // cheap (~17 ms after the XML-parse
+                                // off-main fix) and removes the race.
+                                Task {
+                                    if let coordinator = group.coordinator {
+                                        await sonosManager.refreshTopology(from: coordinator, force: true)
+                                    }
+                                    if sonosManager.htSatChannelMaps[group.coordinatorID] != nil {
+                                        WindowManager.shared.openHomeTheaterEQ()
+                                    } else {
+                                        showEQ = true
+                                    }
                                 }
                             } label: {
                                 Label(L10n.eq, systemImage: "slider.horizontal.3")
@@ -491,58 +520,20 @@ struct NowPlayingView: View {
                 // updates. On drag-end, `seekToPosition` updates the
                 // anchor, which the projection picks up immediately.
                 VStack(spacing: 4) {
-                    TimelineView(.periodic(from: .now, by: 0.1)) { context in
-                        let live = vm.isDraggingSeek
-                            ? vm.dragPosition
-                            : vm.positionAnchor.projected(at: context.date)
-
-                        if trackMetadata.duration > 0 {
-                            SliderWithPopup(
-                                value: Binding(
-                                    get: { live },
-                                    set: { vm.dragPosition = $0 }
-                                ),
-                                range: 0...trackMetadata.duration,
-                                format: { formatTime($0) }
-                            ) { editing in
-                                if editing {
-                                    // Capture the current projected value as
-                                    // the drag starting point so the slider
-                                    // doesn't snap to an old `dragPosition`
-                                    // from a previous gesture.
-                                    vm.dragPosition = vm.positionAnchor.projected(at: context.date)
-                                    vm.isDraggingSeek = true
-                                    // Tell the manager to suppress shared-anchor
-                                    // rebases while the slider is being dragged
-                                    // — otherwise the speaker's pre-drag
-                                    // position reports would fight the user.
-                                    sonosManager.setPositionDragInProgress(coordinatorID: group.coordinatorID)
-                                } else {
-                                    vm.isDraggingSeek = false
-                                    sonosManager.setPositionDragInProgress(coordinatorID: nil)
-                                    seekToPosition(vm.dragPosition)
-                                }
-                            }
+                    SeekBarRow(
+                        vm: vm,
+                        durationSeconds: trackMetadata.duration,
+                        transportIsActive: transportState.isActive,
+                        durationString: trackMetadata.durationString,
+                        formatTime: formatTime,
+                        onDragStart: {
+                            sonosManager.setPositionDragInProgress(coordinatorID: group.coordinatorID)
+                        },
+                        onDragEnd: { pos in
+                            sonosManager.setPositionDragInProgress(coordinatorID: nil)
+                            seekToPosition(pos)
                         }
-
-                        HStack {
-                            Text(transportState.isActive ? formatTime(live) : " ")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                            Spacer()
-                            if trackMetadata.duration > 0 {
-                                Text(trackMetadata.durationString)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            } else if transportState.isActive {
-                                Text(L10n.live)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                    )
                 }
                 .padding(.horizontal, UILayout.horizontalPadding)
                 .padding(.top, 12)
@@ -643,7 +634,16 @@ struct NowPlayingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.top, 16)
-                .padding(.horizontal, UILayout.horizontalPadding)
+                .padding(.leading, UILayout.horizontalPadding)
+                .padding(.trailing, UILayout.horizontalPadding + 8)
+                // 8pt extra trailing padding shifts the symmetric
+                // content (and therefore the centred play button)
+                // 4pt left — matches the master volume row whose
+                // slider centre sits 4pt left of the bare-padding
+                // centre because the trailing value label + spacing
+                // (28 + 12 = 40pt) is 8pt wider than the leading
+                // mute icon + spacing (20 + 12 = 32pt). Keeps the
+                // play button aligned with the master slider centre.
 
                 // In-track seek row — same outer column structure as the
                 // main transport row above, so each seek pair straddles
@@ -697,7 +697,12 @@ struct NowPlayingView: View {
                 }
                 .padding(.top, 4)
                 .padding(.bottom, 12)
-                .padding(.horizontal, UILayout.horizontalPadding)
+                .padding(.leading, UILayout.horizontalPadding)
+                .padding(.trailing, UILayout.horizontalPadding + 8)
+                // Matches the main transport row's asymmetric trailing
+                // padding so the symmetric central column (the −15 /
+                // empty spacer / +15 group) stays vertically aligned
+                // with the play button above it.
                 .frame(maxWidth: .infinity)
 
                 // Volume — master row + per-speaker rows share an alignment
@@ -726,7 +731,13 @@ struct NowPlayingView: View {
                                 vm.applyMasterVolume(newValue)
                             }
                         ),
-                        range: 0...100
+                        range: 0...100,
+                        // Render the master track 1.4× as thick as the
+                        // per-speaker rows. The scale is applied inside
+                        // `SliderWithPopup` against the bare slider only,
+                        // so the floating value popup keeps its native
+                        // proportions.
+                        trackScaleY: 1.4
                     ) { editing in
                         vm.isDraggingVolume = editing
                         if !editing {
@@ -735,11 +746,6 @@ struct NowPlayingView: View {
                     }
                     .frame(maxWidth: 300)
                     .alignmentGuide(.sliderCenter) { d in d[HorizontalAlignment.center] }
-                    // Vertical-only scale — render the master slider as
-                    // visually thicker without altering its frame or any
-                    // horizontal positioning. Anchor center keeps the
-                    // track endpoints in place.
-                    .scaleEffect(x: 1, y: 1.4, anchor: .center)
                     // Explicit tint — the outer ScrollView tint can fall through
                     // to the system accent when resolvedAccentColor is nil, which
                     // loses the user's customization on the main volume slider.
@@ -808,8 +814,9 @@ struct NowPlayingView: View {
                                       ),
                                       accentColor: sonosManager.resolvedAccentColor ?? .accentColor,
                                       onSetVolume: { device, vol in await vm.setSpeakerVolume(device: device, volume: vol) },
-                                      onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) },
-                                      onDragStateChanged: { dragging in vm.isDraggingVolume = dragging })
+                                      onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) })
+                    // `vm.isDraggingVolume` gates the master's drag-
+                    // scratchpad — irrelevant during a sub drag.
                 }
                 } // VStack(alignment: .sliderCenter)
 
@@ -1015,11 +1022,9 @@ struct NowPlayingView: View {
         vm.performAction(id, action)
     }
 
-    // MARK: - State Fetch & Polling (delegated to ViewModel)
+    // MARK: - State Fetch (delegated to ViewModel)
 
     private func fetchCurrentState() async { await vm.fetchCurrentState() }
-    private func startProgressTimer() { vm.startProgressTimer() }
-    private func stopProgressTimer() { vm.stopProgressTimer() }
 }
 
 // MARK: - Expanded Art View
@@ -1089,5 +1094,61 @@ struct ExpandedArtView: View {
         }
         .padding(30)
         .frame(width: 460, height: 560)
+    }
+}
+
+private struct SeekBarRow: View {
+    let vm: NowPlayingViewModel
+    let durationSeconds: TimeInterval
+    let transportIsActive: Bool
+    let durationString: String
+    let formatTime: (TimeInterval) -> String
+    let onDragStart: () -> Void
+    let onDragEnd: (TimeInterval) -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1.0)) { context in
+            let live = vm.isDraggingSeek
+                ? vm.dragPosition
+                : vm.positionAnchor.projected(at: context.date)
+
+            if durationSeconds > 0 {
+                SliderWithPopup(
+                    value: Binding(
+                        get: { live },
+                        set: { vm.dragPosition = $0 }
+                    ),
+                    range: 0...durationSeconds,
+                    format: { formatTime($0) }
+                ) { editing in
+                    if editing {
+                        vm.dragPosition = vm.positionAnchor.projected(at: context.date)
+                        vm.isDraggingSeek = true
+                        onDragStart()
+                    } else {
+                        vm.isDraggingSeek = false
+                        onDragEnd(vm.dragPosition)
+                    }
+                }
+            }
+
+            HStack {
+                Text(transportIsActive ? formatTime(live) : " ")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                Spacer()
+                if durationSeconds > 0 {
+                    Text(durationString)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                } else if transportIsActive {
+                    Text(L10n.live)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }

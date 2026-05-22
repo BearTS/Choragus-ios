@@ -11,6 +11,10 @@ final class WindowManager {
     var lyricsService: LyricsServiceHolder?
     var lyricsCoordinator: LyricsCoordinator?
     var metadataServicesHolder: MusicMetadataServiceHolder?
+    /// Re-injected into each `.environmentObject` site here because
+    /// `WindowManager`'s `NSHostingController` windows have a separate
+    /// SwiftUI environment from the main `WindowGroup`.
+    var artCoordinator: ArtCoordinator?
     var colorScheme: ColorScheme?
 
     private var playHistoryWindow: NSWindow?
@@ -162,8 +166,9 @@ final class WindowManager {
 
         guard let manager = sonosManager,
               let history = playHistoryManager,
-              let metadata = metadataServicesHolder else {
-            sonosDebugLog("[CLUBVIS-OPEN] BAIL — sonos=\(sonosManager != nil) history=\(playHistoryManager != nil) metadata=\(metadataServicesHolder != nil)")
+              let metadata = metadataServicesHolder,
+              let art = artCoordinator else {
+            sonosDebugLog("[CLUBVIS-OPEN] BAIL — sonos=\(sonosManager != nil) history=\(playHistoryManager != nil) metadata=\(metadataServicesHolder != nil) art=\(artCoordinator != nil)")
             return
         }
 
@@ -173,6 +178,7 @@ final class WindowManager {
             .environmentObject(history)
             .environmentObject(metadata)
             .environmentObject(manager.artCache)
+            .environmentObject(art)
 
         let title = group.name.isEmpty
             ? L10n.clubVisWindowTitle
@@ -303,8 +309,8 @@ final class WindowManager {
     ///   window's hosting state went bad (rendered but unresponsive)
     ///   and our `karaokeLyricsWindow` ivar lost track of it.
     /// - Subscribes to `willCloseNotification` on the new window so the
-    ///   ivar nils itself when the user closes — keeps `isVisible`
-    ///   checks honest on subsequent reopens.
+    ///   ivar nils itself when the user closes — required for accurate
+    ///   `isVisible` checks on subsequent reopens.
     /// Convenience entry point used by the View menu's ⌘K command and
     /// the toolbar shortcut — resolves the currently-selected group
     /// from `UDKey.lastSelectedGroupID` (kept in sync by `ContentView`)
@@ -399,6 +405,9 @@ final class WindowManager {
 
     func openHomeTheaterEQ() {
         if let existing = homeTheaterWindow, existing.isVisible {
+            // Recentre an already-open instance too — the user may
+            // have moved between screens since it was last opened.
+            positionOverActiveAppWindow(existing)
             existing.makeKeyAndOrderFront(nil)
             return
         }
@@ -406,11 +415,44 @@ final class WindowManager {
         let view = HomeTheaterEQView()
             .environmentObject(manager)
             .preferredColorScheme(colorScheme)
-        let window = createWindow(title: "Home Theater EQ", content: view, width: 480, height: 420)
-        homeTheaterWindow = window
+        homeTheaterWindow = createWindow(title: "Home Theater EQ",
+                                          content: view,
+                                          width: 480,
+                                          height: 420,
+                                          anchorToActiveWindow: true)
     }
 
-    private func createWindow<Content: View>(title: String, content: Content, width: CGFloat, height: CGFloat) -> NSWindow {
+    /// Filters out `window` itself: when called after
+    /// `makeKeyAndOrderFront`, `NSApp.keyWindow` is the new window
+    /// and centring on itself is a no-op.
+    private func positionOverActiveAppWindow(_ window: NSWindow) {
+        let parent: NSWindow?
+        if let key = NSApp.keyWindow, key !== window {
+            parent = key
+        } else if let main = NSApp.mainWindow, main !== window {
+            parent = main
+        } else {
+            parent = NSApp.windows.first(where: { $0 !== window && $0.isVisible })
+        }
+        guard let parent else { return }
+        let parentFrame = parent.frame
+        let size = window.frame.size
+        var origin = NSPoint(
+            x: parentFrame.midX - size.width / 2,
+            y: parentFrame.midY - size.height / 2
+        )
+        if let screen = parent.screen?.visibleFrame {
+            origin.x = max(screen.minX, min(origin.x, screen.maxX - size.width))
+            origin.y = max(screen.minY, min(origin.y, screen.maxY - size.height))
+        }
+        window.setFrameOrigin(origin)
+    }
+
+    private func createWindow<Content: View>(title: String,
+                                              content: Content,
+                                              width: CGFloat,
+                                              height: CGFloat,
+                                              anchorToActiveWindow: Bool = false) -> NSWindow {
         // Wrap in `LanguageReactiveContainer` so the AppKit-hosted root
         // re-renders when the user flips `UDKey.appLanguage` in
         // Settings — otherwise `L10n.*` reads the new value but SwiftUI
@@ -433,7 +475,13 @@ final class WindowManager {
         )
         window.title = title
         window.contentViewController = controller
-        window.center()
+        if anchorToActiveWindow {
+            // Position before ordering-front so the window doesn't
+            // flash at screen centre and then jump.
+            positionOverActiveAppWindow(window)
+        } else {
+            window.center()
+        }
         window.makeKeyAndOrderFront(nil)
         window.isReleasedWhenClosed = false
         return window

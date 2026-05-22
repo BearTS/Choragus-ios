@@ -1,6 +1,48 @@
 
 # Changelog
 
+## v4.10 — 2026-05-22 — Efficiency and polish
+
+Idle-CPU drop, event-driven group state, and a sweep of UI fixes. No new features.
+
+### Performance
+
+Idle CPU dropped from ~70% to single digits. Queue rendering, karaoke text scrolling, and the ClubVis wall stopped re-rendering on every speaker poll; SOAP / XML / file work moved off the main thread.
+
+- Queue rows redrawn through `Canvas` + `TimelineView(.animation)` instead of per-row SwiftUI rebuild.
+- Karaoke karaoke-style line uses an `NSViewRepresentable` + `CALayer` so SwiftUI invalidation can't fire 60×/s.
+- ClubVis wall tiles cache `CGImage`s; `NSImage` resolution is no longer the per-frame dominator.
+- `SOAPClient.send` and `XMLResponseParser.parse` invocations dispatched via `Task.detached`; main thread stays free during topology refreshes.
+
+### Network
+
+UPnP event subscriptions (ContentDirectory, ZoneGroupTopology) replace background polling. The app no longer hits speakers on a timer for group state.
+
+- Add / remove speaker no longer makes the group flap (briefly revert then settle). Topology refreshes now skip unchanged devices and route by origin device ID.
+
+### Volume sliders
+
+- Adjusting a sub-speaker volume in a group no longer drops the master slider to zero.
+- Sub-volume drag end is event-driven against the speaker's echo (5 s stuck-speaker fallback) — no more visible snap-back on slow LANs.
+- Double-click target on the sub volume number aligns with the visible digits.
+
+### Album art
+
+`ArtResolver` hoisted out of `NowPlayingViewModel` into a shared `ArtCoordinator` registry, one resolver per group, driven by `SonosManager.$groupTrackMetadata`. Now Playing, ClubVis hero, and the wall consume the same resolver — cover drift across surfaces is gone.
+
+- Switching speakers during a track change no longer strands the hero with the default music icon. `vm.art.reset()` on group-change was nuking the shared resolver's state.
+- Transient empty-`albumArtURI` frames on the same URI hold last-good instead of clearing the pin. Apple Music HLS's `/getaa?` proxy refresh used to wipe the resolver.
+
+### UI polish
+
+- Play button centred. Speaker name slots share one width, sub volume numbers right-align with the master.
+- EQ pop-out window centres over the active app window instead of the primary screen.
+- Stale "Using cached data" badge after cache-restore cleared.
+
+### Build
+
+Build 29. Sparkle entitlements untouched from v4.9.2 (Installer unsandboxed, Downloader sandboxed). Both `Sparkle-Installer.entitlements` and `Sparkle-Downloader.entitlements` continue to live in the parent `SonosApp/scripts/` directory.
+
 ## v4.9.2 — 2026-05-16 — Sparkle auto-update fix (regression from v4.9)
 
 > **If the in-app Install Update button fails with "An error occurred while launching the installer", download `Choragus.dmg` manually from the [v4.9.2 release page](https://github.com/scottwaters/Choragus/releases/tag/v4.9.2) and drag it into `/Applications` as normal.** Required for any user upgrading from v4.9 or v4.9.1 — the entitlements bug fixed in v4.9.2 lives inside those installed builds' Sparkle component, so the in-app updater can't fix itself. After this one-time manual install, future auto-updates work.

@@ -113,7 +113,17 @@ public final class SOAPClient: SOAPClientProtocol {
             throw SOAPError.httpError(httpResponse.statusCode, responseBody)
         }
 
-        let parsed = XMLResponseParser.parseActionResponse(responseBody, action: action)
+        // Parse off the caller's actor. In practice every UI-side
+        // caller (`SonosManager`, `NowPlayingViewModel`, etc.) is
+        // `@MainActor`, and `XMLResponseParser.parseActionResponse`
+        // runs `NSXMLParser` synchronously over a response body that
+        // can be several KB. Without an explicit `Task.detached`, Swift
+        // Concurrency was observed in Instruments to keep the
+        // synchronous parse on the caller's actor (main thread),
+        // adding 4–10 ms stalls per SOAP call.
+        let parsed = await Task.detached(priority: .userInitiated) {
+            XMLResponseParser.parseActionResponse(responseBody, action: action)
+        }.value
         return parsed
     }
 

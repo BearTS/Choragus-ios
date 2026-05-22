@@ -75,7 +75,7 @@ struct AppleMusicPlayHelper {
     /// title-+-artist catalog search behind the scenes. Returns nil
     /// when the library track has no catalog equivalent (typically
     /// user uploads).
-    func buildBrowseItem(_ track: AppleMusicTrack) async -> BrowseItem? {
+    func buildBrowseItem(_ track: AppleMusicTrack, knownAlbumID: String? = nil) async -> BrowseItem? {
         let sn = smapiManager.serialNumber(for: ServiceID.appleMusic)
         guard sn != 0 else {
             sonosDiagLog(.warning, tag: "APPLE_MUSICKIT",
@@ -105,8 +105,12 @@ struct AppleMusicPlayHelper {
         // (`0`) parents cause Sonos to silently accept queue ops and then
         // refuse to start playback — observed 2026-05-14 with multiple
         // Apple Music tracks queueing without ever firing a transport event.
+        // `knownAlbumID` lets bulk-play paths hoist the lookup once per
+        // album instead of N times.
         let albumID: String
-        if let supplied = track.albumID, !supplied.isEmpty {
+        if let known = knownAlbumID, !known.isEmpty {
+            albumID = known
+        } else if let supplied = track.albumID, !supplied.isEmpty {
             albumID = supplied
         } else if let resolved = await provider.lookupAlbumID(forSongCatalogID: catalogID) {
             albumID = resolved
@@ -163,26 +167,61 @@ struct AppleMusicPlayHelper {
 
     func playAll(_ tracks: [AppleMusicTrack]) async {
         guard let group else { return }
-        var items: [BrowseItem] = []
-        for track in tracks {
-            if let item = await buildBrowseItem(track) {
-                items.append(item)
-            }
-        }
+        let hoisted = await hoistAlbumIDIfPossible(tracks: tracks)
+        let items = await buildBrowseItems(tracks: tracks, knownAlbumID: hoisted)
         guard !items.isEmpty else { return }
         try? await sonosManager.playItemsReplacingQueue(items, in: group)
     }
 
     func addAllToQueue(_ tracks: [AppleMusicTrack], playNext: Bool) async {
         guard let group else { return }
-        var items: [BrowseItem] = []
-        for track in tracks {
-            if let item = await buildBrowseItem(track) {
-                items.append(item)
-            }
-        }
+        let hoisted = await hoistAlbumIDIfPossible(tracks: tracks)
+        let items = await buildBrowseItems(tracks: tracks, knownAlbumID: hoisted)
         guard !items.isEmpty else { return }
         _ = try? await sonosManager.addBrowseItemsToQueue(items, in: group, playNext: playNext)
+    }
+
+    private func hoistAlbumIDIfPossible(tracks: [AppleMusicTrack]) async -> String? {
+        guard tracks.count >= 2 else { return nil }
+        let perTrackIDs = Set(tracks.compactMap { $0.albumID }.filter { !$0.isEmpty })
+        if perTrackIDs.count == 1 { return perTrackIDs.first }
+        if !perTrackIDs.isEmpty { return nil }
+        for track in tracks {
+            if let n = Int64(track.id), n > 0, n <= 1_000_000_000_000 {
+                return await provider.lookupAlbumID(forSongCatalogID: track.id)
+            }
+        }
+        return nil
+    }
+
+    private func buildBrowseItems(tracks: [AppleMusicTrack], knownAlbumID: String?) async -> [BrowseItem] {
+        let maxConcurrent = 10
+        return await withTaskGroup(of: (Int, BrowseItem?).self) { group in
+            var nextIdx = 0
+            var inFlight = 0
+            var indexed: [(Int, BrowseItem)] = []
+            while nextIdx < tracks.count && inFlight < maxConcurrent {
+                let idx = nextIdx
+                let track = tracks[idx]
+                group.addTask { (idx, await buildBrowseItem(track, knownAlbumID: knownAlbumID)) }
+                nextIdx += 1
+                inFlight += 1
+            }
+            for await pair in group {
+                inFlight -= 1
+                if let item = pair.1 {
+                    indexed.append((pair.0, item))
+                }
+                if nextIdx < tracks.count {
+                    let idx = nextIdx
+                    let track = tracks[idx]
+                    group.addTask { (idx, await buildBrowseItem(track, knownAlbumID: knownAlbumID)) }
+                    nextIdx += 1
+                    inFlight += 1
+                }
+            }
+            return indexed.sorted { $0.0 < $1.0 }.map { $0.1 }
+        }
     }
 
     /// Working DIDL structure per `ServiceSearchProvider.buildTrackDIDL`
@@ -376,6 +415,11 @@ struct AppleMusicTrackRow: View {
             Button("Play Now") { Task { await helper.playNow(track) } }
             Button("Play Next") { Task { await helper.playNext(track) } }
             Button("Add to Queue") { Task { await helper.addToQueue(track) } }
+            #if DEBUG
+            AddToTestFixturesMenuItem(service: "apple-music") {
+                await helper.buildBrowseItem(track)
+            }
+            #endif
         }
     }
 }
@@ -455,6 +499,16 @@ func albumContextMenu(album: AppleMusicAlbum, helper: AppleMusicPlayHelper) -> s
         }
         .disabled(!helper.canPlay)
     }
+    #if DEBUG
+    AddToTestFixturesMenuItem(service: "apple-music") {
+        BrowseItem(
+            id: "apple:album:\(album.id)",
+            title: album.title,
+            artist: album.artist,
+            itemClass: .musicAlbum
+        )
+    }
+    #endif
 }
 
 @MainActor
@@ -476,6 +530,15 @@ func playlistContextMenu(playlist: AppleMusicPlaylist, helper: AppleMusicPlayHel
         }
         .disabled(!helper.canPlay)
     }
+    #if DEBUG
+    AddToTestFixturesMenuItem(service: "apple-music") {
+        BrowseItem(
+            id: "apple:playlist:\(playlist.id)",
+            title: playlist.name,
+            itemClass: .playlist
+        )
+    }
+    #endif
 }
 
 @MainActor

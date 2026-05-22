@@ -115,6 +115,15 @@ struct SliderWithPopup: View {
     var range: ClosedRange<Double> = 0...100
     var step: Double? = nil
     var format: (Double) -> String = { "\(Int($0))" }
+    /// Vertical render scale applied to the underlying `Slider` only.
+    /// The drag-popup overlay sits *outside* the scaled subtree so it
+    /// renders at native resolution regardless of how thick the track
+    /// is drawn. Default `1.0` matches the per-speaker rows; the master
+    /// row passes `1.4` to draw a chunkier track without distorting
+    /// the floating value label. Declared before `onEditingChanged` so
+    /// trailing-closure call sites continue to bind to the editing
+    /// handler.
+    var trackScaleY: CGFloat = 1.0
     var onEditingChanged: ((Bool) -> Void)? = nil
 
     @State private var isDragging = false
@@ -127,6 +136,11 @@ struct SliderWithPopup: View {
             isDragging = editing
             onEditingChanged?(editing)
         }
+        // `scaleEffect` is render-only — the layout frame stays at the
+        // native slider height, so the overlay below positions against
+        // the un-scaled bounding box. Anchor center keeps the visual
+        // track endpoints aligned with the layout endpoints.
+        .scaleEffect(x: 1, y: trackScaleY, anchor: .center)
         .overlay(alignment: .top) {
             if isDragging {
                 Text(format(value))

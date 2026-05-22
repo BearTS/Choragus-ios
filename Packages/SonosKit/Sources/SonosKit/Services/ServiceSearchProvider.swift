@@ -683,6 +683,33 @@ public final class ServiceSearchProvider {
         }
     }
 
+    /// Paginated `browseSMAPI` — fetches every item in a container by
+    /// looping `index += pageSize` until an empty page returns. Empty
+    /// page is the only authoritative terminator (speaker-reported
+    /// `total` is unreliable for SMAPI containers, per the v3.51 batch
+    /// add findings). Used by bulk play/enqueue fallback paths where a
+    /// one-shot `browseSMAPI(count: 50)` would silently truncate large
+    /// Spotify / Plex playlists.
+    public func pagedBrowseSMAPI(id: String, serviceID: Int, serviceURI: String, token: SMAPIToken,
+                                 sn: Int, pageSize: Int = 100, maxItems: Int = 500) async -> [BrowseItem] {
+        var all: [BrowseItem] = []
+        var index = 0
+        while all.count < maxItems {
+            let want = min(pageSize, maxItems - all.count)
+            let page = await browseSMAPI(id: id, serviceID: serviceID, serviceURI: serviceURI,
+                                          token: token, sn: sn, index: index, count: want)
+            sonosDebugLog("[BROWSE] pagedSMAPI page index=\(index) want=\(want) got=\(page.count) total=\(all.count + page.count)")
+            if page.isEmpty { break }
+            all.append(contentsOf: page)
+            index += page.count
+            // Partial page (got fewer than asked) = end of feed. Spotify
+            // and other SMAPI bridges don't always return an empty page
+            // as the terminator — they just stop returning items.
+            if page.count < want { break }
+        }
+        return all
+    }
+
     // MARK: - Anonymous SMAPI (for services like Sonos Radio)
 
     /// Search an anonymous SMAPI service (no auth token needed)

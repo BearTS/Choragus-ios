@@ -116,6 +116,9 @@
 	<key>BugReportPublicKey</key>
 	<string>$(BUG_REPORT_PUBLIC_KEY)</string>
 
+	<key>TestFixturePath</key>
+	<string>$(TEST_FIXTURE_PATH)</string>
+
 	<key>LSBundleCompatibilityToken</key>
 	<string>cabba517-c931-4abd-90ad-155d14009196</string>
 </dict>

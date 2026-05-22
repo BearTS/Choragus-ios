@@ -44,6 +44,7 @@ struct ClubVisWindow: View {
     @EnvironmentObject var anchorTracker: AnchorTracker
     @EnvironmentObject var playHistoryManager: PlayHistoryManager
     @EnvironmentObject var metadataServicesHolder: MusicMetadataServiceHolder
+    @EnvironmentObject var artCoordinator: ArtCoordinator
     /// Live-tunable lighting parameters surfaced from the debug
     /// companion window. Read in the stage to drive the black
     /// multiply opacity and propagated into ClubVisLightingView via
@@ -202,8 +203,6 @@ struct ClubVisWindow: View {
     /// resolved the actual album cover. Re-fetched per track-key
     /// change; only adopted into `settledArtURL` when the resolved
     /// key still matches the current settled track.
-    @State private var iTunesResolvedArtURL: URL? = nil
-    @State private var iTunesResolvedKey: String = ""
 
     /// Resolved slot rects — cached. The packer is non-trivial
     /// (cluster check is O(N²) over already-placed large rects) and
@@ -268,35 +267,8 @@ struct ClubVisWindow: View {
         return UInt32(truncatingIfNeeded: UInt64(bitPattern: Int64(base.hashValue)))
     }
 
-    /// Resolved now-playing art. Prefers a play-history entry's URL
-    /// (populated by NowPlayingView's `ArtResolver` after iTunes
-    /// search resolves) over `trackMetadata.albumArtURI` — which on
-    /// radio is the station logo, not the actual track art. The
-    /// history-resolved URL may take a second or two to land after
-    /// a track change; the now-playing card's `.transition(.opacity)`
-    /// fades from station logo to resolved art when it appears.
-    /// Speaker `/getaa?` proxy URLs are skipped — they're ephemeral
-    /// and frequently return placeholder for direct streams.
     private var nowPlayingArtURL: URL? {
-        let title = trackMetadata.title.lowercased()
-        let artist = trackMetadata.artist.lowercased()
-        if !title.isEmpty {
-            for entry in playHistoryManager.entries.reversed() {
-                guard entry.title.lowercased() == title,
-                      entry.artist.lowercased() == artist else { continue }
-                if let raw = entry.albumArtURI, !raw.isEmpty,
-                   !raw.contains("/getaa?"),
-                   let url = URL(string: raw) {
-                    return url
-                }
-                break
-            }
-        }
-        if let raw = trackMetadata.albumArtURI, !raw.isEmpty,
-           let url = URL(string: raw) {
-            return url
-        }
-        return nil
+        artCoordinator.resolver(for: groupID).displayedArtURL
     }
 
     /// True when the current playback is a radio stream — used to
@@ -390,35 +362,8 @@ struct ClubVisWindow: View {
                 await vm.loadQueue()
                 vm.updateCurrentTrack()
             }
-            // Initialise settled art if track is already settled at
-            // open. Otherwise leave nil and let the .onChange land it
-            // when metadata stabilises.
             if settledTrackKey != "unsettled" {
                 settledArtURL = nowPlayingArtURL
-                // iTunes radio-track-art lookup is only for radio: the
-                // DIDL art on radio is the station logo, not the song.
-                // For service streams (Apple Music, Spotify, etc.) the
-                // DIDL already carries the correct album cover, and an
-                // iTunes search by title+artist returns hits ordered
-                // by popularity rather than the actually-playing
-                // album — so a track that exists on both an album and
-                // a compilation/soundtrack would resolve to the wrong
-                // cover (e.g. "Like a Surgeon" on Dare to Be Stupid
-                // resolved to a different Weird Al album cover).
-                let title = trackMetadata.title
-                let artist = trackMetadata.artist
-                if isRadioPlayback, !title.isEmpty, !artist.isEmpty {
-                    Task { @MainActor in
-                        guard let raw = await AlbumArtSearchService.shared.searchRadioTrackArt(
-                            artist: artist, title: title),
-                              let url = URL(string: raw) else { return }
-                        if settledTrackKey == "\(title)|\(artist)" {
-                            iTunesResolvedKey = "\(title)|\(artist)"
-                            iTunesResolvedArtURL = url
-                            settledArtURL = url
-                        }
-                    }
-                }
             }
             maybeShowMemorialOverlay()
             // Kick off genre backfill so genre-matching has fresh data
@@ -563,53 +508,19 @@ struct ClubVisWindow: View {
             scheduleRebuildTiles("similarArtists")
         }
         .onChange(of: settledTrackKey) { _, newKey in
-            // Track became settled (or transitioned to a different
-            // settled track) — refresh the vis card art. Skip when
-            // newKey is "unsettled" so the card holds the previous
-            // settled art across the gap.
+            // "unsettled" holds the previous art across ad-break / blip.
             guard newKey != "unsettled" else { return }
-            // Drop any stale iTunes-resolved URL from the previous
-            // track so we don't briefly display the wrong cover.
-            if iTunesResolvedKey != newKey {
-                iTunesResolvedArtURL = nil
-            }
             settledArtURL = nowPlayingArtURL
-            // Radio-only iTunes lookup — see the matching block in
-            // `.task { … }` above for why we don't run this for
-            // service streams (DIDL is already correct, iTunes
-            // search returns wrong-album hits).
-            let title = trackMetadata.title
-            let artist = trackMetadata.artist
-            guard isRadioPlayback, !title.isEmpty, !artist.isEmpty else { return }
-            Task { @MainActor in
-                guard let raw = await AlbumArtSearchService.shared.searchRadioTrackArt(
-                    artist: artist, title: title),
-                      let url = URL(string: raw) else { return }
-                // Adopt only if the user is still on the same track.
-                if settledTrackKey == "\(title)|\(artist)" {
-                    iTunesResolvedKey = "\(title)|\(artist)"
-                    iTunesResolvedArtURL = url
-                    settledArtURL = url
-                }
-            }
         }
         .onChange(of: nowPlayingArtURL) { _, newArt in
-            // History got an updated art URL for the current track
-            // (e.g., the same iTunes URL just hit ImageCache via the
-            // Now Playing card's ArtResolver). Apply only if settled
-            // AND we don't already have a higher-quality
-            // iTunes-resolved URL pinned for this track.
+            // Catches async iTunes-resolve landing after the initial
+            // DIDL render.
             guard settledTrackKey != "unsettled" else { return }
-            if iTunesResolvedArtURL == nil {
-                settledArtURL = newArt
-            }
+            settledArtURL = newArt
         }
         .onChange(of: settledArtURL) { _, newArt in
             visLog("settledArtURL changed → \(newArt?.absoluteString.suffix(60).description ?? "nil")")
-            // Cancel any previous in-flight download/heroBump chain.
-            // Multiple rapid settledArtURL changes (DIDL → history
-            // art → iTunes resolve) used to fire 3 concurrent tasks,
-            // each with its own download + rebuildTiles + hero bump.
+            // Coalesce rapid DIDL → history → iTunes flips to one task.
             settledArtTask?.cancel()
             settledArtTask = Task { @MainActor in
                 await downloadNowPlayingArt()
@@ -617,7 +528,6 @@ struct ClubVisWindow: View {
                 heroUpdateTrigger &+= 1
                 visLog("heroUpdateTrigger bumped to \(heroUpdateTrigger)")
             }
-            Task { @MainActor in await downloadNowPlayingArt() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .queueChanged)) { note in
             // The Sonos coordinator signalled a queue mutation. Two
@@ -1741,6 +1651,47 @@ private struct ClubVisWallView: View {
     /// Tasks, each firing its own seed-swap → multiple tile fades
     /// per track change. Cancelling collapses to one.
     @State private var seedSwapDebounceTask: Task<Void, Never>?
+    /// Lazy `NSImage → CGImage` cache. Held as a `@State`-backed class
+    /// so internal mutation (cache fills) doesn't republish through
+    /// SwiftUI's value-equality observation. Every `Canvas` tick used
+    /// to call `GraphicsContext.draw(Image(nsImage:), in:)` per visible
+    /// tile, which routed through `NSImageContents.displayList →
+    /// CGImageForProposedRect → bestRepresentationForRect → hints
+    /// validation` for every tile every frame — ~5 s of `NSImage`
+    /// resolution work on a 41 s sample (≈ 12 % of wall, the single
+    /// hottest path in the visualisation). Pre-resolving once per URL
+    /// and drawing via `Image(decorative: cgImage, …)` bypasses the
+    /// `NSImage` path entirely.
+    @State private var cgImageCache = CGImageCache()
+
+    /// Reference-typed cache so per-tick reads/fills mutate in-place
+    /// without triggering SwiftUI re-renders (the `@State` only tracks
+    /// the wrapping reference). Indexed by the tile-pool URL key.
+    fileprivate final class CGImageCache {
+        private var cache: [URL: CGImage] = [:]
+
+        /// Returns the cached `CGImage` for `url`, deriving and
+        /// inserting it from `nsImage` on a miss. Subsequent calls are
+        /// O(1) dictionary lookups.
+        func cgImage(for url: URL, nsImage: NSImage) -> CGImage? {
+            if let cached = cache[url] { return cached }
+            var rect = CGRect(origin: .zero, size: nsImage.size)
+            guard let cg = nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil) else {
+                return nil
+            }
+            cache[url] = cg
+            return cg
+        }
+
+        /// Drops entries whose URLs are no longer in the live tile
+        /// pool. Called when the pool shrinks so the cache can't grow
+        /// without bound across long sessions / many track changes.
+        func prune(keepingURLs keep: Set<URL>) {
+            for key in cache.keys where !keep.contains(key) {
+                cache.removeValue(forKey: key)
+            }
+        }
+    }
 
     private struct FadeState {
         let oldURL: URL?
@@ -1810,18 +1761,26 @@ private struct ClubVisWallView: View {
                     if let fade = fades[i] {
                         let frac = (t - fade.startTime) / fade.duration
                         let (oldOp, newOp) = fade.opacities(at: frac)
-                        if oldOp > 0, let oldURL = fade.oldURL, let oldImg = preloaded[oldURL] {
+                        if oldOp > 0,
+                           let oldURL = fade.oldURL,
+                           let oldImg = preloaded[oldURL],
+                           let oldCG = cgImageCache.cgImage(for: oldURL, nsImage: oldImg) {
                             var oldCtx = ctx
                             oldCtx.opacity = oldOp
-                            oldCtx.draw(Image(nsImage: oldImg), in: rect)
+                            oldCtx.draw(Image(decorative: oldCG, scale: 1, orientation: .up), in: rect)
                         }
-                        if newOp > 0, let newURL = fade.newURL, let newImg = preloaded[newURL] {
+                        if newOp > 0,
+                           let newURL = fade.newURL,
+                           let newImg = preloaded[newURL],
+                           let newCG = cgImageCache.cgImage(for: newURL, nsImage: newImg) {
                             var newCtx = ctx
                             newCtx.opacity = newOp
-                            newCtx.draw(Image(nsImage: newImg), in: rect)
+                            newCtx.draw(Image(decorative: newCG, scale: 1, orientation: .up), in: rect)
                         }
-                    } else if let url = slotURLs[i], let img = preloaded[url] {
-                        ctx.draw(Image(nsImage: img), in: rect)
+                    } else if let url = slotURLs[i],
+                              let img = preloaded[url],
+                              let cg = cgImageCache.cgImage(for: url, nsImage: img) {
+                        ctx.draw(Image(decorative: cg, scale: 1, orientation: .up), in: rect)
                     }
                 }
             }
@@ -1831,6 +1790,13 @@ private struct ClubVisWallView: View {
         .task {
             assignInitialSlots()
             startSwapLoop()
+        }
+        .onChange(of: preloaded.count) {
+            // Evict CGImage cache entries whose source URL is no
+            // longer in the live `preloaded` dict. Without this the
+            // cache only grows across a session; with it cumulative
+            // memory tracks the parent's tile-pool retention policy.
+            cgImageCache.prune(keepingURLs: Set(preloaded.keys))
         }
         .onChange(of: pool) {
             // Skip when a rebuild is in flight — the cover fade
@@ -2135,8 +2101,8 @@ private struct ClubVisWallView: View {
         // diffFill on every track change because `topGenres`
         // recomputes per track, shuffling the t1/t2/t3 membership;
         // any slot URL that was assigned from the previous t1
-        // would suddenly be "evicted" even though its image is
-        // perfectly fine in `preloaded`. Keeping cached-image URLs
+        // would suddenly be "evicted" even though its image was
+        // already cached in `preloaded`. Keeping cached-image URLs
         // means pool churn no longer drives mass tile replacement.
         let evicted = currentlyShown.filter { url in
             !allNew.contains(url) && preloaded[url] == nil

@@ -47,8 +47,19 @@ public protocol TransportStrategyDelegate: AnyObject {
     /// `GetZoneGroupState`. We don't try to parse the event payload —
     /// its triple-encoded XML structure historically produced incorrect
     /// group data. The notification is just a "something changed,
-    /// pull the truth" signal.
-    func transportRequestsTopologyRefresh()
+    /// pull the truth" signal. `originDeviceID` is the speaker that
+    /// fired the event — refreshing *from that speaker* gives the most
+    /// self-consistent view (its own state is by definition the truth
+    /// it just published) and avoids the topology-propagation flap that
+    /// hits when refreshing from a sibling speaker that hasn't caught
+    /// up yet.
+    func transportRequestsTopologyRefresh(originDeviceID: String)
+    /// Fired when a `ContentDirectory` NOTIFY reports that the current
+    /// playback queue (`Q:0`) for `groupID` changed. The delegate
+    /// should reload the queue (typically by posting `.queueChanged`
+    /// so `QueueView` does its `Browse(Q:0)` round-trip). The event
+    /// only signals "queue mutated" — it does not carry the new items.
+    func transportDidObserveQueueChange(_ groupID: String)
     // Services for direct queries
     func getAVTransportService() -> AVTransportService
     func getRenderingControlService() -> RenderingControlService
@@ -111,6 +122,12 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     private static let avTransportPath = "/MediaRenderer/AVTransport/Control"
     private static let renderingControlPath = "/MediaRenderer/RenderingControl/Control"
     private static let topologyPath = "/ZoneGroupTopology/Control"
+    // Each Sonos device exposes a `ContentDirectory:1` instance under
+    // `/MediaServer/...`. Subscribing tells us when `Q:0` (the active
+    // queue), `SQ:` (saved queues / Sonos playlists), and library
+    // sub-containers mutate — i.e. when the Sonos app, a voice command,
+    // or another client edits the queue out from under us.
+    private static let contentDirectoryPath = "/MediaServer/ContentDirectory/Control"
 
     public init() {}
 
@@ -228,6 +245,20 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
             }
         }
 
+        // Subscribe to ContentDirectory on each coordinator. The queue
+        // (`Q:0`) lives on the coordinator, not on grouped members, so
+        // one subscription per group is sufficient. Without this, queue
+        // edits made from outside Choragus (Sonos app, voice, another
+        // client) were only picked up when the user happened to hit
+        // Refresh.
+        for group in groups {
+            guard let coordinator = group.coordinator else { continue }
+            let alreadySubscribed = deviceSnapshot.contains(where: { $0.value == coordinator.id && serviceSnapshot[$0.key] == "contentDirectory" })
+            if !alreadySubscribed {
+                await subscribeToService(device: coordinator, path: Self.contentDirectoryPath, serviceType: "contentDirectory", manager: subManager)
+            }
+        }
+
         // Subscribe to RenderingControl on each visible speaker
         for group in groups {
             for member in group.members {
@@ -296,7 +327,9 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
         case "renderingControl":
             handleRenderingControlEvent(body: body, deviceID: deviceID)
         case "topology":
-            handleTopologyEvent(body: body)
+            handleTopologyEvent(body: body, deviceID: deviceID)
+        case "contentDirectory":
+            handleContentDirectoryEvent(body: body, deviceID: deviceID)
         default:
             break
         }
@@ -424,21 +457,49 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     }
 
     @MainActor
-    private func handleTopologyEvent(body: String) {
+    private func handleContentDirectoryEvent(body: String, deviceID: String) {
+        let event = LastChangeParser.parseContentDirectoryEvent(body)
+        // Only `Q:0` (active queue) triggers a queue reload. Other
+        // container updates (`SQ:`, `R:0/0`, `A:*`, …) are out of scope
+        // for this hook — favorites, playlists and library mutations
+        // are infrequent and don't drive idle CPU.
+        guard event.queueChanged else { return }
+        // ContentDirectory subscriptions are opened per coordinator,
+        // so the SID's deviceID *is* the coordinator's groupID.
+        guard currentGroups.contains(where: { $0.coordinatorID == deviceID }) else {
+            return
+        }
+        delegate?.transportDidObserveQueueChange(deviceID)
+    }
+
+    @MainActor
+    private func handleTopologyEvent(body: String, deviceID: String) {
         // Don't try to parse the event payload — its triple-encoded XML
         // structure historically produced incorrect group data. Treat
         // the event as a trigger only and have the delegate pull the
         // authoritative ZoneGroupState via SOAP. Without this signal,
         // grouping/ungrouping changes made from Sonos's app weren't
         // reflected here until the 30-second SSDP rescan caught them.
-        delegate?.transportRequestsTopologyRefresh()
+        // Pass the originating device so the delegate can refresh
+        // from the speaker that actually fired the event — that
+        // speaker's `GetZoneGroupState` response is by construction
+        // consistent with the change it just published. Refreshing
+        // from a sibling speaker that hasn't yet propagated the change
+        // was the source of the group/ungroup flap observed in the
+        // wild.
+        delegate?.transportRequestsTopologyRefresh(originDeviceID: deviceID)
     }
 
     // MARK: - Reconciliation Polling
 
-    /// Safety net: periodically polls full state to catch anything events missed.
-    /// Runs every 15 seconds. Also handles position updates since UPnP events
-    /// don't include elapsed position.
+    /// Safety net: periodically polls full state to catch anything
+    /// events missed. Runs at `Timing.reconciliationPolling` (15 s);
+    /// kept tight while the cache-restore / `isUsingCachedData`
+    /// interaction with event flow is being stabilised. Elapsed
+    /// position for the *visible* group is rebased more aggressively
+    /// by `NowPlayingViewModel.pollActivePosition` at 2 s; this poll
+    /// exists for everything else (background groups, TV-mode HDMI
+    /// audio-format updates, and silent subscription death).
     private func startReconciliationPolling() {
         reconciliationTask?.cancel()
         reconciliationTask = Task { [weak self] in

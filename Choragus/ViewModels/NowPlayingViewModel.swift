@@ -115,8 +115,6 @@ final class NowPlayingViewModel {
     var dragPosition: TimeInterval = 0
     var isDraggingSeek = false
 
-    var metadataPollingTask: Task<Void, Never>?
-
     // MARK: - Transport UI
 
     var actionInFlight: String?
@@ -173,17 +171,20 @@ final class NowPlayingViewModel {
 
     // MARK: - Art
 
-    let art: ArtResolver
+    var art: ArtResolver {
+        artCoordinator.resolver(for: group.coordinatorID)
+    }
+
+    private let artCoordinator: ArtCoordinator
 
     // MARK: - Init
 
-    init(sonosManager: any NowPlayingServices, group: SonosGroup, playHistoryManager: PlayHistoryManager? = nil) {
+    init(sonosManager: any NowPlayingServices,
+         group: SonosGroup,
+         artCoordinator: ArtCoordinator) {
         self.sonosManager = sonosManager
         self.group = group
-        self.art = ArtResolver(
-            playHistoryManager: playHistoryManager,
-            albumArtSearch: sonosManager.albumArtSearch
-        )
+        self.artCoordinator = artCoordinator
     }
 
     // MARK: - Transport Actions
@@ -624,16 +625,11 @@ final class NowPlayingViewModel {
         return String(format: "%d:%02d", minutes, seconds)
     }
 
-    // MARK: - Art Orchestration (single entry point — View calls this, not art.* directly)
+    // MARK: - Track-change side effects (position anchor only)
 
     func handleMetadataChanged(_ metadata: TrackMetadata) {
-        // Track URI changed — reset search state and position
         let uriChanged = art.lastTrackURI != (metadata.trackURI ?? metadata.title)
-        art.handleTrackURIChanged(trackMetadata: metadata, group: group)
-
-        // Reset position on source/track change to avoid stale time display.
-        // Bypasses the drift threshold — track change is by definition a
-        // hard discontinuity, never noise.
+        // Hard discontinuity — bypass drift threshold.
         if uriChanged {
             sonosManager.setPositionAnchor(
                 coordinatorID: group.coordinatorID,
@@ -642,227 +638,10 @@ final class NowPlayingViewModel {
                                isPlaying: transportState.isPlaying)
             )
         }
-
-        // Always update display art (handles ad break → station art switch)
-        art.updateDisplayedArt(trackMetadata: metadata, group: group)
-
-        // During ad breaks, skip searches but still update display
-        guard !metadata.isAdBreak else { return }
-
-        // Update from new albumArtURI if available
-        if let artStr = metadata.albumArtURI, !artStr.isEmpty, let url = URL(string: artStr) {
-            if art.displayedArtURL != url && !art.forceWebArt {
-                art.displayedArtURL = url
-            }
-            // The speaker's reported art is the source of truth. If we had
-            // previously pinned a different URL for this track (e.g. an early
-            // metadata frame during a queue advance held a stale /getaa URL
-            // from the previous track until Sonos refreshed its internal
-            // art), invalidate that stale pin so the next resolution starts
-            // fresh from the current metadata.
-            if let pinned = art.pinnedURL(for: metadata), pinned != url, !art.forceWebArt {
-                art.invalidateArtResolution(for: metadata)
-            }
-        } else if !art.forceWebArt {
-            // Speaker now reports no art at all for this track. Any pin set
-            // from an earlier (stale) metadata frame is wrong — clear it.
-            if art.pinnedURL(for: metadata) != nil {
-                art.invalidateArtResolution(for: metadata)
-            }
-            // Also clear displayedArtURL: updateDisplayedArt's sticky guard
-            // (currentURI == lastTrackURI && resolved == nil) preserves the
-            // previous frame's URL across same-track metadata polls, which
-            // here would keep showing the stale URL after the speaker
-            // reverted to "no art". Sync to truth.
-            if art.displayedArtURL != nil {
-                art.displayedArtURL = nil
-            }
-        }
-
-        // Search for web art if metadata art is missing
-        searchWebArtIfNeeded(metadata)
-        art.updateDisplayedArt(trackMetadata: metadata, group: group)
-
-        // Radio: search for track-specific art
-        searchRadioTrackArt(metadata)
     }
 
     func onArtAppear() {
         art.loadPersistedArtOverride(trackMetadata: trackMetadata, group: group)
-        handleMetadataChanged(trackMetadata)
-    }
-
-    // MARK: - Art Search (orchestration — delegates to AlbumArtSearchService)
-
-    private func searchWebArtIfNeeded(_ metadata: TrackMetadata) {
-        // Don't override manually chosen art
-        if art.forceWebArt { return }
-
-        // Once we've resolved art for a track in this session (via any path
-        // — metadata, cached, iTunes search), don't keep re-searching on
-        // every poll. iTunes returns different top hits across calls for
-        // queries like "Air + The Virgin Suicides" (Redux vs Original
-        // Soundtrack), so repeated searches visibly flip the cover. Only
-        // explicit user actions (Search Artwork, Refresh Artwork, Ignore,
-        // Clear) invalidate this and allow another search.
-        if art.isArtResolved(for: metadata) { return }
-
-        let hasArt = metadata.albumArtURI != nil && !(metadata.albumArtURI?.isEmpty ?? true)
-        let isLocalFile = metadata.trackURI.map(URIPrefix.isLocal) ?? false
-        let hasLocalOnlyArt = hasArt && (metadata.albumArtURI?.contains("/getaa?") ?? false)
-        // For service tracks with persistent art URLs, no search needed —
-        // pin the metadata URL as the canonical answer for this track.
-        //
-        // EXCEPT on radio: `albumArtURI` for a radio stream is the
-        // station's logo URL, not track-specific art. Pinning it
-        // shadows the `radioTrackArtURL` that `searchRadioTrackArt`
-        // resolves async — the user sees the station logo even when
-        // we've successfully found cover art for the song.
-        let onRadio = !metadata.stationName.isEmpty || metadata.isRadioStream
-        if hasArt && !hasLocalOnlyArt {
-            art.clearWebArt()
-            if !onRadio,
-               let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
-                art.markArtResolved(for: metadata, url: url)
-            }
-            return
-        }
-        // Trust whatever art the speaker is serving via /getaa? — that's
-        // either the file's embedded art (local files), the album folder
-        // image, or service-supplied art proxied through the speaker
-        // (Spotify, Apple Music, Tidal, etc.). Only fall through to iTunes
-        // when the speaker has no art at all. This avoids generic
-        // title-collision results (e.g. "This Christmas" returning a
-        // Toni Braxton album for a Joe track) from overriding correct art.
-        if hasLocalOnlyArt {
-            art.clearWebArt()
-            if !onRadio,
-               let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
-                art.markArtResolved(for: metadata, url: url)
-            }
-            return
-        }
-        art.clearWebArt()
-
-        let searchTerm: String
-        if isLocalFile && !metadata.album.isEmpty {
-            searchTerm = metadata.album
-        } else if !metadata.stationName.isEmpty {
-            searchTerm = metadata.stationName
-        } else if !metadata.album.isEmpty {
-            searchTerm = metadata.album
-        } else if !metadata.title.isEmpty {
-            searchTerm = metadata.title
-        } else {
-            return
-        }
-        let artist = displayArtist
-        let key = "\(searchTerm)|\(artist)"
-        guard art.shouldSearch(key: key) else { return }
-        art.setSearchKey(key)
-        art.setWebArtResult(nil)
-        // Strip parenthetical content and everything after unclosed ( or [
-        var cleanedSearchTerm = searchTerm
-            .replacingOccurrences(of: "\\s*\\([^)]*\\)", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "\\s*\\[[^\\]]*\\]", with: "", options: .regularExpression)
-        if let p = cleanedSearchTerm.firstIndex(of: "(") { cleanedSearchTerm = String(cleanedSearchTerm[..<p]) }
-        if let b = cleanedSearchTerm.firstIndex(of: "[") { cleanedSearchTerm = String(cleanedSearchTerm[..<b]) }
-        cleanedSearchTerm = cleanedSearchTerm.trimmingCharacters(in: .whitespaces)
-        let effectiveSearch = cleanedSearchTerm.isEmpty ? searchTerm : cleanedSearchTerm
-
-        Task {
-            var foundArt = await sonosManager.albumArtSearch.searchArtwork(
-                artist: artist, album: effectiveSearch
-            )
-
-            // If no result, try artist only
-            if foundArt == nil, !artist.isEmpty {
-                foundArt = await sonosManager.albumArtSearch.searchArtwork(
-                    artist: artist, album: ""
-                )
-            }
-
-            if let artURL = foundArt, let url = URL(string: artURL) {
-                // Always update history and cache with the found art
-                art.playHistoryManager?.updateArtwork(
-                    forTitle: metadata.title, artist: metadata.artist, artURL: artURL
-                )
-                sonosManager.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
-                art.setWebArtResult(url)
-                // Pin the resolved URL so every subsequent display call
-                // returns this exact URL for this track — no more iTunes
-                // reruns, no more alternation between candidate covers.
-                art.markArtResolved(for: metadata, url: url)
-                art.updateDisplayedArt(trackMetadata: metadata, group: group)
-            } else {
-                if !hasLocalOnlyArt {
-                    art.setWebArtResult(nil)
-                }
-            }
-        }
-    }
-
-    private func searchRadioTrackArt(_ metadata: TrackMetadata) {
-        // While paused on a radio stream, metadata can churn — title briefly
-        // goes empty between stream-content pings and then repopulates. Each
-        // oscillation would otherwise clear radioTrackArtURL, then search,
-        // then set it again, producing a visible artwork flicker. Don't
-        // re-evaluate radio track art while paused; the existing art stays.
-        guard transportState.isActive else { return }
-
-        // Real "no current track" cases — clear and bail.
-        if metadata.stationName.isEmpty || metadata.isAdBreak {
-            art.clearRadioTrackArt()
-            return
-        }
-        // Transient empty/echoed title while still on the same station —
-        // don't clear `radioTrackArtURL`, just don't re-search. Holds the
-        // last-good track art across the metadata blip instead of flicking
-        // back to the station logo. Without this, every poll where the
-        // title hasn't repopulated yet (or matches the station name as a
-        // placeholder) clears the art and the next iTunes search may not
-        // re-resolve it (e.g. tracks where the radio's "artist" tag is the
-        // composer/conductor, not the recording artist).
-        if metadata.title.isEmpty || metadata.title == metadata.stationName {
-            return
-        }
-        let key = "\(metadata.title)|\(metadata.artist)"
-        guard art.shouldSearchRadioTrack(key: key) else { return }
-        art.setRadioTrackKey(key)
-        if art.radioStationArtURL == nil, let stationArt = art.displayedArtURL ?? metadata.albumArtURI.flatMap({ URL(string: $0) }) {
-            art.radioStationArtURL = stationArt
-        }
-        var artist = TrackMetadata.filterDeviceID(metadata.artist)
-        // Radio streams routinely populate the artist field with the
-        // station or soundtrack name rather than the actual performer
-        // (e.g. station "Movie Ticket Radio" sends artist="Animal House").
-        // Searching iTunes with that string poisons the result. When the
-        // artist matches the station name verbatim, drop it — the
-        // service's title-only and OST-shape strategies are more
-        // reliable than an artist+title query against a wrong artist.
-        if !metadata.stationName.isEmpty,
-           artist.caseInsensitiveCompare(metadata.stationName) == .orderedSame {
-            artist = ""
-        }
-        // For radio streams, keep the full title including parenthetical content
-        // since it often contains the movie/album name (e.g. "Tristania (Troia Troy)")
-        let searchTitle = metadata.title
-        Task {
-            if let artURL = await sonosManager.albumArtSearch.searchRadioTrackArt(
-                artist: artist, title: searchTitle
-            ) {
-                sonosDebugLog("[ART/RADIO] resolved \(searchTitle) – \(artist) → \(artURL.prefix(80))")
-                art.setRadioTrackArt(URL(string: artURL), forKey: key)
-                art.playHistoryManager?.updateArtwork(
-                    forTitle: metadata.title, artist: metadata.artist, artURL: artURL
-                )
-                // Cache so menu bar and other views can find it
-                sonosManager.cacheArtURL(artURL, forURI: metadata.trackURI ?? "", title: metadata.title, itemID: "")
-            } else {
-                sonosDebugLog("[ART/RADIO] no result for \(searchTitle) – \(artist)")
-                art.setRadioTrackArt(nil, forKey: key)
-            }
-        }
     }
 
     // MARK: - Metadata Enrichment
@@ -886,55 +665,24 @@ final class NowPlayingViewModel {
         return enriched
     }
 
-    // MARK: - Position Polling & Interpolation
+    // MARK: - Fetch Current State
 
-    func startProgressTimer() {
-        stopProgressTimer()
-        // No 1 Hz `Timer` advance any more. Position display is now
-        // driven entirely by `TimelineView { ctx in
-        //   positionAnchor.projected(at: ctx.date) }` at the view
-        // layer — the visible position updates at display refresh
-        // (60/120 Hz) rather than in 1 s discrete chunks, eliminating
-        // the seek-bar / time-text "pause then jump" rhythm and
-        // letting the synced lyrics scroll continuously.
-        //
-        // Lightweight metadata poll stays — it catches radio track
-        // changes that don't trigger UPnP events. The poll updates the
-        // anchor through `handleMetadataChanged` (track-change branch)
-        // and `updateAnchorFromAuthoritative` (drift branch).
-        metadataPollingTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: Timing.metadataPolling)
-                guard !Task.isCancelled, let self else { return }
-                guard let coordinator = group.coordinator else { return }
-                do {
-                    let position = try await sonosManager.getPositionInfo(group: group)
-                    let enriched = await enrichMetadata(position, state: transportState, coordinator: coordinator)
-                    handleMetadataChanged(enriched)
-                    // Hand the polled position to the manager so the
-                    // shared anchor's drift-tolerant rebase runs and
-                    // every consumer (panel + karaoke) sees the same
-                    // result.
-                    sonosManager.transportDidUpdatePosition(
-                        group.coordinatorID,
-                        position: enriched.position,
-                        duration: enriched.duration
-                    )
-                } catch {
-                    sonosDebugLog("[NOW-PLAYING] Metadata poll failed: \(error)")
-                }
-            }
+    /// `LastChange` events exclude `RelativeTimePosition`, so the
+    /// visible seek bar needs a direct poll for the active group.
+    func pollActivePosition() async {
+        guard group.coordinator != nil else { return }
+        do {
+            let position = try await sonosManager.getPositionInfo(group: group)
+            sonosManager.transportDidUpdatePosition(
+                group.coordinatorID,
+                position: position.position,
+                duration: position.duration
+            )
+        } catch {
+            // Reconciliation poll is the safety net.
         }
     }
 
-    func stopProgressTimer() {
-        metadataPollingTask?.cancel()
-        metadataPollingTask = nil
-    }
-
-    // MARK: - Fetch Current State
-
-    /// Fetches live state for the selected group directly from speakers.
     /// Bypasses cache, grace periods, and thresholds — always sets exact current values.
     func fetchCurrentState() async {
         // Direct speaker query for all state
@@ -953,6 +701,9 @@ final class NowPlayingViewModel {
                            wallClock: Date(),
                            isPlaying: transportState.isPlaying)
         )
+        // Manual drive — speaker switches whose metadata is already
+        // cached don't republish, so `.onReceive` wouldn't fire.
+        handleMetadataChanged(meta)
         crossfadeOn = (try? await sonosManager.getCrossfadeMode(group: group)) ?? false
 
         // No local mirror to populate — `volume`, `isMuted`,
