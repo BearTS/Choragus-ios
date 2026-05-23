@@ -47,7 +47,7 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 Efficiency and polish release. No new features — many small wins for everyday use.
 
-- **Quieter on the CPU.** Idle CPU dropped from ~70% to single digits with the queue, karaoke, or visualisation visible.
+- **Quieter on the CPU.** Idle single CPU core dropped from ~70% to single digits without karaoke or club visualisation visible.
 - **Speaker grouping settles first time.** Adding or removing a speaker from a group no longer briefly reverts before sticking. Less network chatter overall — group state now flows from speaker events instead of repeated polls.
 - **Volume sliders behave.** Dragging a sub-speaker's volume no longer drops the master slider to zero halfway through. The double-click target on the volume number now lands on the digits you can see. Slow speakers no longer make the slider visibly snap back after release.
 - **Album art stays put.** Switching speakers right when a track changes used to leave the now-playing card blank until you forced a refresh. The art now survives the swap.
