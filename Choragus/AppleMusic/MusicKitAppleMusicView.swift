@@ -17,6 +17,14 @@ import SonosKit
 private enum AppleMusicTab: String, CaseIterable {
     case browse = "Browse"
     case search = "Search"
+
+    // Localized label for display; rawValue stays the stable identity.
+    var displayName: String {
+        switch self {
+        case .browse: return L10n.amBrowse
+        case .search: return L10n.search
+        }
+    }
 }
 
 private enum AppleMusicSearchCategory: String, CaseIterable, Hashable {
@@ -25,6 +33,17 @@ private enum AppleMusicSearchCategory: String, CaseIterable, Hashable {
     case albums = "Albums"
     case tracks = "Tracks"
     case playlists = "Playlists"
+
+    // Localized label for display; rawValue stays the stable identity.
+    var displayName: String {
+        switch self {
+        case .all: return L10n.all
+        case .artists: return L10n.amArtists
+        case .albums: return L10n.amAlbums
+        case .tracks: return L10n.tracks
+        case .playlists: return L10n.amPlaylists
+        }
+    }
 }
 
 enum AppleMusicDestination: Hashable {
@@ -142,19 +161,19 @@ struct MusicKitAppleMusicView: View {
         case .playlist(_, let name, _, _): return name
         case .libraryList(let kind):
             switch kind {
-            case .songs: return "Library Songs"
-            case .albums: return "Library Albums"
-            case .artists: return "Library Artists"
-            case .playlists: return "Library Playlists"
+            case .songs: return L10n.amLibrarySongs
+            case .albums: return L10n.amLibraryAlbums
+            case .artists: return L10n.amLibraryArtists
+            case .playlists: return L10n.amLibraryPlaylists
             }
         case .recommendation(let title, _, _, _): return title
         case .trackList(let title, _): return title
         case .albumList(let title, _): return title
         case .artistList(let title, _): return title
         case .playlistList(let title, _): return title
-        case .genreList: return "Genres"
+        case .genreList: return L10n.amGenres
         case .genreCharts(_, let name): return name
-        case .stationSearch: return "Radio Stations"
+        case .stationSearch: return L10n.amRadioStations
         case .stationList(let title, _): return title
         }
     }
@@ -244,21 +263,21 @@ struct MusicKitAppleMusicView: View {
     private var authStatusBadge: some View {
         switch authorisation {
         case .authorised:
-            Label("Connected", systemImage: "checkmark.circle.fill")
+            Label(L10n.amConnected, systemImage: "checkmark.circle.fill")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.green)
         case .notDetermined:
             EmptyView()
         case .denied:
-            Label("Permission denied", systemImage: "exclamationmark.circle.fill")
+            Label(L10n.amPermissionDenied, systemImage: "exclamationmark.circle.fill")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.red)
         case .noSubscription:
-            Label("No subscription", systemImage: "exclamationmark.triangle.fill")
+            Label(L10n.amNoActiveSubscription, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.orange)
         case .notApplicable:
-            Label("Not available in this build", systemImage: "xmark.circle")
+            Label(L10n.amNotAvailableInBuild, systemImage: "xmark.circle")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
@@ -298,7 +317,7 @@ struct MusicKitAppleMusicView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             if state == .notDetermined {
-                Button("Connect Apple Music") {
+                Button(L10n.amConnectAppleMusic) {
                     Task {
                         let result = await provider.requestAuthorisation()
                         authorisation = result
@@ -317,10 +336,10 @@ struct MusicKitAppleMusicView: View {
 
     private func promptTitle(_ state: AppleMusicAuthorisation) -> String {
         switch state {
-        case .notDetermined: return "Connect Apple Music"
-        case .denied:        return "Apple Music access denied"
-        case .noSubscription: return "Apple Music subscription required"
-        case .notApplicable: return "Apple Music is not available in this build"
+        case .notDetermined: return L10n.amConnectAppleMusic
+        case .denied:        return L10n.amAccessDeniedTitle
+        case .noSubscription: return L10n.amSubscriptionRequiredTitle
+        case .notApplicable: return L10n.amNotAvailableTitle
         case .authorised:    return ""
         }
     }
@@ -328,13 +347,13 @@ struct MusicKitAppleMusicView: View {
     private func promptBody(_ state: AppleMusicAuthorisation) -> String {
         switch state {
         case .notDetermined:
-            return "Allow Choragus to read your Apple Music catalog so you can search and browse from inside the app."
+            return L10n.amPromptBodyNotDetermined
         case .denied:
-            return "Choragus needs Apple Music access to search the catalog. Open System Settings → Privacy & Security → Media & Apple Music and enable Choragus."
+            return L10n.amPromptBodyDenied
         case .noSubscription:
-            return "Apple Music search needs an active subscription on the Apple ID you're signed in with on this Mac."
+            return L10n.amPromptBodyNoSubscription
         case .notApplicable:
-            return "This build doesn't include MusicKit support. Use the legacy Apple Music entry under Music Services to search via Sonos."
+            return L10n.amPromptBodyNotApplicable
         case .authorised:
             return ""
         }
@@ -364,7 +383,7 @@ struct MusicKitAppleMusicView: View {
     private var tabPicker: some View {
         Picker("", selection: $tab) {
             ForEach(AppleMusicTab.allCases, id: \.self) { t in
-                Text(t.rawValue).tag(t)
+                Text(t.displayName).tag(t)
             }
         }
         .pickerStyle(.segmented)
@@ -384,11 +403,11 @@ struct MusicKitAppleMusicView: View {
             if isSearching && resultsEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if query.isEmpty {
-                emptyState("Search Apple Music",
-                           subtitle: "Type a song, album, artist, or playlist to search the catalog.")
+                emptyState(L10n.amSearchAppleMusic,
+                           subtitle: L10n.amSearchPrompt)
             } else if resultsEmpty {
-                emptyState("No results",
-                           subtitle: "Try a different query.")
+                emptyState(L10n.amNoResults,
+                           subtitle: L10n.amTryDifferentQuery)
             } else {
                 resultsList
             }
@@ -403,7 +422,7 @@ struct MusicKitAppleMusicView: View {
     private var searchCategoryPicker: some View {
         Picker("", selection: $searchCategory) {
             ForEach(AppleMusicSearchCategory.allCases, id: \.self) { c in
-                Text(c.rawValue).tag(c)
+                Text(c.displayName).tag(c)
             }
         }
         .pickerStyle(.segmented)
@@ -422,19 +441,19 @@ struct MusicKitAppleMusicView: View {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     // Library — saved by the user
                     if !library.songs.isEmpty || !library.albums.isEmpty || !library.playlists.isEmpty || !library.artists.isEmpty {
-                        sectionHeader("Your Library")
-                        libraryRow("Songs", icon: "music.note", count: library.songs.count,
+                        sectionHeader(L10n.amYourLibrary)
+                        libraryRow(L10n.amSongs, icon: "music.note", count: library.songs.count,
                                    preview: library.songs.first?.artworkURL, kind: .songs)
-                        libraryRow("Albums", icon: "square.stack", count: library.albums.count,
+                        libraryRow(L10n.amAlbums, icon: "square.stack", count: library.albums.count,
                                    preview: library.albums.first?.artworkURL, kind: .albums)
-                        libraryRow("Artists", icon: "music.mic", count: library.artists.count,
+                        libraryRow(L10n.amArtists, icon: "music.mic", count: library.artists.count,
                                    preview: library.artists.first?.artworkURL, kind: .artists)
-                        libraryRow("Playlists", icon: "music.note.list", count: library.playlists.count,
+                        libraryRow(L10n.amPlaylists, icon: "music.note.list", count: library.playlists.count,
                                    preview: library.playlists.first?.artworkURL, kind: .playlists)
                     }
                     // Recently played
                     if !recentlyPlayed.albums.isEmpty || !recentlyPlayed.playlists.isEmpty {
-                        sectionHeader("Recently Played")
+                        sectionHeader(L10n.amRecentlyPlayed)
                         ForEach(recentlyPlayed.albums) { album in albumRow(album) }
                         ForEach(recentlyPlayed.playlists) { p in playlistRow(p) }
                     }
@@ -444,7 +463,7 @@ struct MusicKitAppleMusicView: View {
                     // long "Made for You / New Releases / etc." stack).
                     let visibleRecs = recommendations.filter { !$0.albums.isEmpty || !$0.playlists.isEmpty || !$0.stations.isEmpty }
                     if !visibleRecs.isEmpty {
-                        sectionHeader("Made for You")
+                        sectionHeader(L10n.amMadeForYou)
                         ForEach(visibleRecs) { rec in
                             recommendationRow(rec)
                         }
@@ -452,54 +471,54 @@ struct MusicKitAppleMusicView: View {
                     // Top charts — drilldown rows so the root browse stays
                     // skimmable. Tapping each pushes a detail list view.
                     if !browse.topSongs.isEmpty || !browse.topAlbums.isEmpty || !browse.topPlaylists.isEmpty {
-                        sectionHeader("Charts")
+                        sectionHeader(L10n.amCharts)
                         if !browse.topSongs.isEmpty {
-                            chartsRow("Top Songs", icon: "music.note",
+                            chartsRow(L10n.amTopSongs, icon: "music.note",
                                       count: browse.topSongs.count,
                                       preview: browse.topSongs.first?.artworkURL,
-                                      destination: .trackList(title: "Top Songs", tracks: browse.topSongs))
+                                      destination: .trackList(title: L10n.amTopSongs, tracks: browse.topSongs))
                         }
                         if !browse.topAlbums.isEmpty {
-                            chartsRow("Top Albums", icon: "square.stack",
+                            chartsRow(L10n.amTopAlbums, icon: "square.stack",
                                       count: browse.topAlbums.count,
                                       preview: browse.topAlbums.first?.artworkURL,
-                                      destination: .albumList(title: "Top Albums", albums: browse.topAlbums))
+                                      destination: .albumList(title: L10n.amTopAlbums, albums: browse.topAlbums))
                         }
                         if !browse.topPlaylists.isEmpty {
-                            chartsRow("Top Playlists", icon: "music.note.list",
+                            chartsRow(L10n.amTopPlaylists, icon: "music.note.list",
                                       count: browse.topPlaylists.count,
                                       preview: browse.topPlaylists.first?.artworkURL,
-                                      destination: .playlistList(title: "Top Playlists", playlists: browse.topPlaylists))
+                                      destination: .playlistList(title: L10n.amTopPlaylists, playlists: browse.topPlaylists))
                         }
                     }
                     // Browse extras — genres + radio + spatial audio.
-                    sectionHeader("Browse")
+                    sectionHeader(L10n.amBrowse)
                     if !genresList.isEmpty {
-                        chartsRow("Genres", icon: "guitars",
+                        chartsRow(L10n.amGenres, icon: "guitars",
                                   count: genresList.count,
                                   preview: browse.topAlbums.first?.artworkURL,
                                   destination: .genreList(genres: genresList))
                     }
                     if !personalStations.isEmpty {
-                        chartsRow("Stations For You", icon: "antenna.radiowaves.left.and.right",
+                        chartsRow(L10n.amStationsForYou, icon: "antenna.radiowaves.left.and.right",
                                   count: personalStations.count,
                                   preview: personalStations.first?.artworkURL,
-                                  destination: .stationList(title: "Stations For You", stations: personalStations))
+                                  destination: .stationList(title: L10n.amStationsForYou, stations: personalStations))
                     }
-                    chartsRow("Radio Stations", icon: "antenna.radiowaves.left.and.right",
+                    chartsRow(L10n.amRadioStations, icon: "antenna.radiowaves.left.and.right",
                               count: defaultStations.count,
                               preview: defaultStations.first?.artworkURL,
                               destination: .stationSearch)
                     if !spatialAudio.isEmpty {
-                        chartsRow("Now in Spatial Audio", icon: "hifispeaker.2.fill",
+                        chartsRow(L10n.amNowInSpatialAudio, icon: "hifispeaker.2.fill",
                                   count: spatialAudio.count,
                                   preview: spatialAudio.first?.artworkURL,
-                                  destination: .albumList(title: "Spatial Audio", albums: spatialAudio))
+                                  destination: .albumList(title: L10n.amSpatialAudio, albums: spatialAudio))
                     }
                     // Empty fallback if absolutely nothing came back
                     if browse == .empty && library == .empty && recentlyPlayed == .empty && recommendations.isEmpty {
-                        emptyState("Search Apple Music",
-                                   subtitle: "Type a song, album, or artist to search the Apple Music catalog.")
+                        emptyState(L10n.amSearchAppleMusic,
+                                   subtitle: L10n.amSearchCatalogPrompt)
                     }
                 }
                 .padding(.vertical, 8)
@@ -522,7 +541,7 @@ struct MusicKitAppleMusicView: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.body).foregroundStyle(.primary)
-                    Text("^[\(count) item](inflect: true)")
+                    Text(L10n.amItemsCount(count))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -550,7 +569,7 @@ struct MusicKitAppleMusicView: View {
                 AppleMusicArtworkSquare(url: preview)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(rec.title).font(.body).lineLimit(1)
-                    Text("^[\(count) item](inflect: true)")
+                    Text(L10n.amItemsCount(count))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -583,7 +602,7 @@ struct MusicKitAppleMusicView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.body).foregroundStyle(.primary)
                     if count > 0 {
-                        Text("^[\(count) item](inflect: true)")
+                        Text(L10n.amItemsCount(count))
                             .font(.callout).foregroundStyle(.secondary)
                     }
                 }
@@ -629,7 +648,7 @@ struct MusicKitAppleMusicView: View {
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("Search Apple Music", text: $query)
+            TextField(L10n.amSearchAppleMusic, text: $query)
                 .textFieldStyle(.plain)
                 .onChange(of: query) { _, newValue in
                     scheduleSearch(for: newValue)
@@ -668,25 +687,25 @@ struct MusicKitAppleMusicView: View {
         case .all: allResultsList
         case .tracks:
             if results.tracks.isEmpty {
-                emptyState("No tracks", subtitle: "No tracks matched.")
+                emptyState(L10n.amNoTracks, subtitle: L10n.amNoTracksMatched)
             } else {
                 AppleMusicTrackListView(tracks: results.tracks, helper: playHelper)
             }
         case .albums:
             if results.albums.isEmpty {
-                emptyState("No albums", subtitle: "No albums matched.")
+                emptyState(L10n.amNoAlbums, subtitle: L10n.amNoAlbumsMatched)
             } else {
                 AppleMusicAlbumListView(albums: results.albums, helper: playHelper) { path.append($0) }
             }
         case .artists:
             if results.artists.isEmpty {
-                emptyState("No artists", subtitle: "No artists matched.")
+                emptyState(L10n.amNoArtists, subtitle: L10n.amNoArtistsMatched)
             } else {
                 AppleMusicArtistListView(artists: results.artists) { path.append($0) }
             }
         case .playlists:
             if results.playlists.isEmpty {
-                emptyState("No playlists", subtitle: "No playlists matched.")
+                emptyState(L10n.amNoPlaylists, subtitle: L10n.amNoPlaylistsMatched)
             } else {
                 AppleMusicPlaylistListView(playlists: results.playlists, helper: playHelper) { path.append($0) }
             }
@@ -697,35 +716,35 @@ struct MusicKitAppleMusicView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
                 if !results.tracks.isEmpty {
-                    sectionHeader("Songs")
+                    sectionHeader(L10n.amSongs)
                     ForEach(results.tracks.prefix(5)) { track in trackRow(track) }
                     if results.tracks.count > 5 {
-                        seeAllRow("See All Songs", count: results.tracks.count,
-                                  destination: .trackList(title: "Songs", tracks: results.tracks))
+                        seeAllRow(L10n.amSeeAllSongs, count: results.tracks.count,
+                                  destination: .trackList(title: L10n.amSongs, tracks: results.tracks))
                     }
                 }
                 if !results.albums.isEmpty {
-                    sectionHeader("Albums")
+                    sectionHeader(L10n.amAlbums)
                     ForEach(results.albums.prefix(5)) { album in albumRow(album) }
                     if results.albums.count > 5 {
-                        seeAllRow("See All Albums", count: results.albums.count,
-                                  destination: .albumList(title: "Albums", albums: results.albums))
+                        seeAllRow(L10n.amSeeAllAlbums, count: results.albums.count,
+                                  destination: .albumList(title: L10n.amAlbums, albums: results.albums))
                     }
                 }
                 if !results.artists.isEmpty {
-                    sectionHeader("Artists")
+                    sectionHeader(L10n.amArtists)
                     ForEach(results.artists.prefix(5)) { artist in artistRow(artist) }
                     if results.artists.count > 5 {
-                        seeAllRow("See All Artists", count: results.artists.count,
-                                  destination: .artistList(title: "Artists", artists: results.artists))
+                        seeAllRow(L10n.amSeeAllArtists, count: results.artists.count,
+                                  destination: .artistList(title: L10n.amArtists, artists: results.artists))
                     }
                 }
                 if !results.playlists.isEmpty {
-                    sectionHeader("Playlists")
+                    sectionHeader(L10n.amPlaylists)
                     ForEach(results.playlists.prefix(5)) { playlist in playlistRow(playlist) }
                     if results.playlists.count > 5 {
-                        seeAllRow("See All Playlists", count: results.playlists.count,
-                                  destination: .playlistList(title: "Playlists", playlists: results.playlists))
+                        seeAllRow(L10n.amSeeAllPlaylists, count: results.playlists.count,
+                                  destination: .playlistList(title: L10n.amPlaylists, playlists: results.playlists))
                     }
                 }
             }

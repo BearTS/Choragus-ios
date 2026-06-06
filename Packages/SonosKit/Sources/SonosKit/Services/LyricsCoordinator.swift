@@ -93,11 +93,13 @@ public final class LyricsCoordinator: ObservableObject {
         let title = metadata.title
         let album = metadata.album.isEmpty ? nil : metadata.album
         let durationSec = metadata.duration > 0 ? Int(metadata.duration) : nil
+        let trackURI = metadata.trackURI
 
         loadTasks[key] = Task { [weak self] in
             let result = await service.fetch(
                 artist: artist, title: title,
-                album: album, durationSeconds: durationSec
+                album: album, durationSeconds: durationSec,
+                trackURI: trackURI
             )
             if Task.isCancelled { return }
             guard let self else { return }

@@ -83,7 +83,17 @@ public final class LyricsService: Sendable {
     /// repeated plays of the same track are free.
     public func fetch(artist: String, title: String,
                       album: String? = nil, durationSeconds: Int? = nil,
+                      trackURI: String? = nil,
                       callSite: String = "\(#fileID):\(#line)") async -> Lyrics? {
+        // Suno tracks: LRCLIB won't have AI-generated songs. Pull the lyrics
+        // from Suno's own clip metadata (metadata.prompt) instead. Plain text
+        // only — Suno doesn't provide timecodes.
+        if let uri = trackURI, let uuid = SunoCatalog.uuid(fromURI: uri) {
+            if let text = await SunoResolver.lyrics(forUUID: uuid), !text.isEmpty {
+                return Lyrics(plainText: text, synced: nil, isInstrumental: false)
+            }
+            return nil
+        }
         let key = MetadataCacheRepository.Kind.lyrics.key(artist, title, album ?? "")
         let summary = "[\(artist)|\(title)|\(album ?? "")|d=\(durationSeconds.map(String.init) ?? "-")]"
 

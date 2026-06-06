@@ -46,6 +46,10 @@ struct CachedAsyncImage: View {
     let url: URL?
     var cornerRadius: CGFloat = 4
     var priority: ImageFetchPriority = .background
+    /// Force fill-to-frame regardless of the image's aspect — used by the
+    /// karaoke backdrop, which must always cover the 16:9 window rather than
+    /// scale-to-fit a square cover.
+    var fillFrame: Bool = false
 
     @State private var image: NSImage?
     @State private var isLoading = false
@@ -59,9 +63,20 @@ struct CachedAsyncImage: View {
     var body: some View {
         Group {
             if let img = image ?? cachedImage {
-                Image(nsImage: img)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                // Square art scales to FIT (whole image shown); non-square art
+                // FILLS and is cropped to the frame. The Color.clear container
+                // takes the proposed frame size and the clip is applied to it,
+                // so an overflowing fill can't escape the frame (the failure in
+                // the screenshot, where a wide image bled over the track text).
+                let s = img.size
+                let isSquare = s.width > 0 && s.height > 0
+                    && abs(s.width - s.height) / max(s.width, s.height) < 0.02
+                Color.clear
+                    .overlay {
+                        Image(nsImage: img)
+                            .resizable()
+                            .aspectRatio(contentMode: (fillFrame || !isSquare) ? .fill : .fit)
+                    }
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             } else {
                 RoundedRectangle(cornerRadius: cornerRadius)

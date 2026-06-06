@@ -252,7 +252,14 @@ struct AppleMusicPlayHelper {
 
 // MARK: - Sort
 
-enum AppleMusicTrackSort: String, CaseIterable, Identifiable {
+/// Localized display name for a sort option. The enum `rawValue` stays
+/// English-stable (identity / persistence); `localizedName` is what the
+/// picker renders.
+protocol AppleMusicSortOption {
+    var localizedName: String { get }
+}
+
+enum AppleMusicTrackSort: String, CaseIterable, Identifiable, AppleMusicSortOption {
     case original = "Default"
     case title = "Title"
     case artist = "Artist"
@@ -263,6 +270,20 @@ enum AppleMusicTrackSort: String, CaseIterable, Identifiable {
     case addedNewest = "Recently Added"
     case addedOldest = "First Added"
     var id: String { rawValue }
+
+    var localizedName: String {
+        switch self {
+        case .original: return L10n.amSortDefault
+        case .title: return L10n.amSortTitle
+        case .artist: return L10n.amSortArtist
+        case .album: return L10n.amSortAlbum
+        case .duration: return L10n.amSortDuration
+        case .releaseNewest: return L10n.amSortNewest
+        case .releaseOldest: return L10n.amSortOldest
+        case .addedNewest: return L10n.amSortRecentlyAdded
+        case .addedOldest: return L10n.amSortFirstAdded
+        }
+    }
 
     func sort(_ tracks: [AppleMusicTrack]) -> [AppleMusicTrack] {
         switch self {
@@ -279,7 +300,7 @@ enum AppleMusicTrackSort: String, CaseIterable, Identifiable {
     }
 }
 
-enum AppleMusicAlbumSort: String, CaseIterable, Identifiable {
+enum AppleMusicAlbumSort: String, CaseIterable, Identifiable, AppleMusicSortOption {
     case original = "Default"
     case title = "Title"
     case artist = "Artist"
@@ -288,6 +309,18 @@ enum AppleMusicAlbumSort: String, CaseIterable, Identifiable {
     case addedNewest = "Recently Added"
     case addedOldest = "First Added"
     var id: String { rawValue }
+
+    var localizedName: String {
+        switch self {
+        case .original: return L10n.amSortDefault
+        case .title: return L10n.amSortTitle
+        case .artist: return L10n.amSortArtist
+        case .releaseNewest: return L10n.amSortNewest
+        case .releaseOldest: return L10n.amSortOldest
+        case .addedNewest: return L10n.amSortRecentlyAdded
+        case .addedOldest: return L10n.amSortFirstAdded
+        }
+    }
 
     func sort(_ albums: [AppleMusicAlbum]) -> [AppleMusicAlbum] {
         switch self {
@@ -302,10 +335,17 @@ enum AppleMusicAlbumSort: String, CaseIterable, Identifiable {
     }
 }
 
-enum AppleMusicArtistSort: String, CaseIterable, Identifiable {
+enum AppleMusicArtistSort: String, CaseIterable, Identifiable, AppleMusicSortOption {
     case original = "Default"
     case name = "Name"
     var id: String { rawValue }
+
+    var localizedName: String {
+        switch self {
+        case .original: return L10n.amSortDefault
+        case .name: return L10n.amSortName
+        }
+    }
 
     func sort(_ artists: [AppleMusicArtist]) -> [AppleMusicArtist] {
         switch self {
@@ -315,11 +355,19 @@ enum AppleMusicArtistSort: String, CaseIterable, Identifiable {
     }
 }
 
-enum AppleMusicStationSort: String, CaseIterable, Identifiable {
+enum AppleMusicStationSort: String, CaseIterable, Identifiable, AppleMusicSortOption {
     case original = "Default"
     case name = "Name"
     case liveFirst = "Live First"
     var id: String { rawValue }
+
+    var localizedName: String {
+        switch self {
+        case .original: return L10n.amSortDefault
+        case .name: return L10n.amSortName
+        case .liveFirst: return L10n.amSortLiveFirst
+        }
+    }
 
     func sort(_ stations: [AppleMusicStation]) -> [AppleMusicStation] {
         switch self {
@@ -334,10 +382,17 @@ enum AppleMusicStationSort: String, CaseIterable, Identifiable {
     }
 }
 
-enum AppleMusicPlaylistSort: String, CaseIterable, Identifiable {
+enum AppleMusicPlaylistSort: String, CaseIterable, Identifiable, AppleMusicSortOption {
     case original = "Default"
     case name = "Name"
     var id: String { rawValue }
+
+    var localizedName: String {
+        switch self {
+        case .original: return L10n.amSortDefault
+        case .name: return L10n.amSortName
+        }
+    }
 
     func sort(_ playlists: [AppleMusicPlaylist]) -> [AppleMusicPlaylist] {
         switch self {
@@ -349,19 +404,19 @@ enum AppleMusicPlaylistSort: String, CaseIterable, Identifiable {
 
 /// Compact `Sort: <key>` picker dropped into each list view. Generic
 /// over the sort enum so all four content types share the same UI.
-struct AppleMusicSortPicker<Sort: CaseIterable & Hashable & RawRepresentable>: View where Sort.RawValue == String, Sort.AllCases: RandomAccessCollection {
+struct AppleMusicSortPicker<Sort: CaseIterable & Hashable & RawRepresentable & AppleMusicSortOption>: View where Sort.RawValue == String, Sort.AllCases: RandomAccessCollection {
     @Binding var selection: Sort
 
     var body: some View {
         Menu {
-            Picker("Sort", selection: $selection) {
+            Picker(L10n.amSortLabelPlain, selection: $selection) {
                 ForEach(Array(Sort.allCases), id: \.self) { value in
-                    Text(value.rawValue).tag(value)
+                    Text(value.localizedName).tag(value)
                 }
             }
             .pickerStyle(.inline)
         } label: {
-            Label("Sort: \(selection.rawValue)", systemImage: "arrow.up.arrow.down")
+            Label(L10n.amSortLabel(selection.localizedName), systemImage: "arrow.up.arrow.down")
                 .labelStyle(.titleAndIcon)
                 .font(.callout)
         }
@@ -412,9 +467,9 @@ struct AppleMusicTrackRow: View {
         .contentShape(Rectangle())
         .onTapGesture { Task { await helper.playNow(track) } }
         .contextMenu {
-            Button("Play Now") { Task { await helper.playNow(track) } }
-            Button("Play Next") { Task { await helper.playNext(track) } }
-            Button("Add to Queue") { Task { await helper.addToQueue(track) } }
+            Button(L10n.playNow) { Task { await helper.playNow(track) } }
+            Button(L10n.playNext) { Task { await helper.playNext(track) } }
+            Button(L10n.addToQueue) { Task { await helper.addToQueue(track) } }
             #if DEBUG
             AddToTestFixturesMenuItem(service: "apple-music") {
                 await helper.buildBrowseItem(track)
@@ -440,35 +495,35 @@ struct AppleMusicBulkActionBar: View {
     var body: some View {
         HStack(spacing: 6) {
             Button {
-                tracker.run("Playing \(tracks.count) track\(tracks.count == 1 ? "" : "s")…") {
+                tracker.run(L10n.amPlayingTracks(tracks.count)) {
                     await helper.playAll(tracks)
                 }
             } label: {
-                Label("Play All", systemImage: "play.fill")
+                Label(L10n.amPlayAll, systemImage: "play.fill")
             }
             .controlSize(.small)
             .disabled(disabled)
             Button {
-                tracker.run("Adding \(tracks.count) track\(tracks.count == 1 ? "" : "s") to queue…") {
+                tracker.run(L10n.amAddingTracksToQueue(tracks.count)) {
                     await helper.addAllToQueue(tracks, playNext: false)
                 }
             } label: {
-                Label("Add All to Queue", systemImage: "text.append")
+                Label(L10n.amAddAllToQueue, systemImage: "text.append")
             }
             .controlSize(.small)
             .disabled(disabled)
             Button {
-                tracker.run("Queueing \(tracks.count) track\(tracks.count == 1 ? "" : "s") next…") {
+                tracker.run(L10n.amQueueingTracksNext(tracks.count)) {
                     await helper.addAllToQueue(tracks, playNext: true)
                 }
             } label: {
-                Label("Play Next", systemImage: "text.insert")
+                Label(L10n.playNext, systemImage: "text.insert")
             }
             .controlSize(.small)
             .disabled(disabled)
             Spacer()
             if !tracks.isEmpty {
-                Text("\(tracks.count) item\(tracks.count == 1 ? "" : "s")")
+                Text(L10n.amItemsCount(tracks.count))
                     .font(.callout)
                     .foregroundStyle(.tertiary)
             }
@@ -484,18 +539,18 @@ struct AppleMusicBulkActionBar: View {
 @ViewBuilder
 func albumContextMenu(album: AppleMusicAlbum, helper: AppleMusicPlayHelper) -> some View {
     if helper.tracker.isInFlight {
-        inFlightMenuItem(label: helper.tracker.inFlightLabel ?? "Action in progress…")
+        inFlightMenuItem(label: helper.tracker.inFlightLabel ?? L10n.amActionInProgress)
     } else {
-        Button("Play Now") {
-            helper.tracker.run("Playing \(album.title)…") { await helper.playAllInAlbum(album.id) }
+        Button(L10n.playNow) {
+            helper.tracker.run(L10n.amPlaying(album.title)) { await helper.playAllInAlbum(album.id) }
         }
         .disabled(!helper.canPlay)
-        Button("Play Next") {
-            helper.tracker.run("Queueing \(album.title) next…") { await helper.addAllInAlbumToQueue(album.id, playNext: true) }
+        Button(L10n.playNext) {
+            helper.tracker.run(L10n.amQueueingNext(album.title)) { await helper.addAllInAlbumToQueue(album.id, playNext: true) }
         }
         .disabled(!helper.canPlay)
-        Button("Add to Queue") {
-            helper.tracker.run("Adding \(album.title) to queue…") { await helper.addAllInAlbumToQueue(album.id, playNext: false) }
+        Button(L10n.addToQueue) {
+            helper.tracker.run(L10n.amAddingToQueue(album.title)) { await helper.addAllInAlbumToQueue(album.id, playNext: false) }
         }
         .disabled(!helper.canPlay)
     }
@@ -515,18 +570,18 @@ func albumContextMenu(album: AppleMusicAlbum, helper: AppleMusicPlayHelper) -> s
 @ViewBuilder
 func playlistContextMenu(playlist: AppleMusicPlaylist, helper: AppleMusicPlayHelper) -> some View {
     if helper.tracker.isInFlight {
-        inFlightMenuItem(label: helper.tracker.inFlightLabel ?? "Action in progress…")
+        inFlightMenuItem(label: helper.tracker.inFlightLabel ?? L10n.amActionInProgress)
     } else {
-        Button("Play Now") {
-            helper.tracker.run("Playing \(playlist.name)…") { await helper.playAllInPlaylist(playlist.id) }
+        Button(L10n.playNow) {
+            helper.tracker.run(L10n.amPlaying(playlist.name)) { await helper.playAllInPlaylist(playlist.id) }
         }
         .disabled(!helper.canPlay)
-        Button("Play Next") {
-            helper.tracker.run("Queueing \(playlist.name) next…") { await helper.addAllInPlaylistToQueue(playlist.id, playNext: true) }
+        Button(L10n.playNext) {
+            helper.tracker.run(L10n.amQueueingNext(playlist.name)) { await helper.addAllInPlaylistToQueue(playlist.id, playNext: true) }
         }
         .disabled(!helper.canPlay)
-        Button("Add to Queue") {
-            helper.tracker.run("Adding \(playlist.name) to queue…") { await helper.addAllInPlaylistToQueue(playlist.id, playNext: false) }
+        Button(L10n.addToQueue) {
+            helper.tracker.run(L10n.amAddingToQueue(playlist.name)) { await helper.addAllInPlaylistToQueue(playlist.id, playNext: false) }
         }
         .disabled(!helper.canPlay)
     }
@@ -545,18 +600,18 @@ func playlistContextMenu(playlist: AppleMusicPlaylist, helper: AppleMusicPlayHel
 @ViewBuilder
 func artistContextMenu(artist: AppleMusicArtist, helper: AppleMusicPlayHelper) -> some View {
     if helper.tracker.isInFlight {
-        inFlightMenuItem(label: helper.tracker.inFlightLabel ?? "Action in progress…")
+        inFlightMenuItem(label: helper.tracker.inFlightLabel ?? L10n.amActionInProgress)
     } else {
-        Button("Play Top Songs") {
-            helper.tracker.run("Playing \(artist.name) top songs…") { await helper.playTopSongsOf(artist.id) }
+        Button(L10n.playTopSongs) {
+            helper.tracker.run(L10n.amPlayingTopSongs(artist.name)) { await helper.playTopSongsOf(artist.id) }
         }
         .disabled(!helper.canPlay)
-        Button("Queue Top Songs Next") {
-            helper.tracker.run("Queueing \(artist.name) top songs next…") { await helper.addTopSongsToQueue(artist.id, playNext: true) }
+        Button(L10n.queueTopSongsNext) {
+            helper.tracker.run(L10n.amQueueingTopSongsNext(artist.name)) { await helper.addTopSongsToQueue(artist.id, playNext: true) }
         }
         .disabled(!helper.canPlay)
-        Button("Add Top Songs to Queue") {
-            helper.tracker.run("Adding \(artist.name) top songs to queue…") { await helper.addTopSongsToQueue(artist.id, playNext: false) }
+        Button(L10n.addTopSongsToQueue) {
+            helper.tracker.run(L10n.amAddingTopSongsToQueue(artist.name)) { await helper.addTopSongsToQueue(artist.id, playNext: false) }
         }
         .disabled(!helper.canPlay)
     }

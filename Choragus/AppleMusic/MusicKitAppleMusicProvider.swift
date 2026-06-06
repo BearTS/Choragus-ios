@@ -1006,6 +1006,41 @@ public final class MusicKitAppleMusicProvider: AppleMusicProvider, @unchecked Se
         @unknown default:    return .notDetermined
         }
     }
+
+    /// Creates a populated library playlist via the Apple Music REST API.
+    /// `MusicDataRequest` injects the developer + user tokens, so no manual
+    /// token handling is needed. `MusicLibrary.add(_:to:)` is unavailable on
+    /// macOS, so the tracks are passed in the create-call's body instead.
+    public func createLibraryPlaylist(name: String, catalogSongIDs: [String]) async -> Bool {
+        guard !catalogSongIDs.isEmpty,
+              let url = URL(string: "https://api.music.apple.com/v1/me/library/playlists") else { return false }
+        let body: [String: Any] = [
+            "attributes": ["name": name],
+            "relationships": [
+                "tracks": ["data": catalogSongIDs.map { ["id": $0, "type": "songs"] }]
+            ]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        do {
+            let response = try await MusicDataRequest(urlRequest: request).response()
+            let status = response.urlResponse.statusCode
+            let ok = status == 201 || status == 200
+            if !ok {
+                // Bug-report diagnostic: the status pinpoints why a save failed
+                // (e.g. 403 = no library write scope). No token is logged —
+                // MusicDataRequest injects auth; the request is never logged.
+                sonosDebugLog("[APPLEMUSIC] createLibraryPlaylist HTTP \(status) for \(catalogSongIDs.count) tracks")
+            }
+            return ok
+        } catch {
+            sonosDebugLog("[APPLEMUSIC] createLibraryPlaylist failed: \(error.localizedDescription)")
+            return false
+        }
+    }
 }
 
 #endif

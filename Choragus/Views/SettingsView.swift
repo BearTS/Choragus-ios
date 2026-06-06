@@ -268,10 +268,10 @@ private struct TabContentView: View {
                         }
                     }
 
-                    settingsRow("Interval") {
+                    settingsRow(L10n.intervalLabel) {
                         Picker("", selection: $rollupInterval) {
-                            Text("30 min").tag(30)
-                            Text("1 hour").tag(60)
+                            Text(L10n.minutes30).tag(30)
+                            Text(L10n.hour1).tag(60)
                             Text(L10n.manualOnly).tag(0)
                         }
                         .frame(maxWidth: 140)
@@ -301,7 +301,7 @@ private struct TabContentView: View {
                 Divider().padding(.vertical, 4)
 
                 if playHistoryManager.totalEntries > 0 {
-                    Text("\(playHistoryManager.totalEntries) entries, \(String(format: "%.1f", playHistoryManager.totalListeningHours)) hours")
+                    Text(L10n.historyStats(entries: playHistoryManager.totalEntries, hours: playHistoryManager.totalListeningHours))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -584,10 +584,10 @@ private struct TabContentView: View {
                             get: { ImageCache.shared.maxAgeDays },
                             set: { ImageCache.shared.maxAgeDays = $0 }
                         )) {
-                            Text("7 days").tag(7)
-                            Text("30 days").tag(30)
-                            Text("90 days").tag(90)
-                            Text("1 year").tag(365)
+                            Text(L10n.days7).tag(7)
+                            Text(L10n.days30).tag(30)
+                            Text(L10n.days90).tag(90)
+                            Text(L10n.year1).tag(365)
                             Text(L10n.never_).tag(99999)
                         }
                         .frame(width: 100)

@@ -33,6 +33,17 @@ public enum URIPrefix {
         uri.hasPrefix(sonosApiStream) || uri.hasPrefix(sonosApiRadio) || uri.hasPrefix(rinconMP3Radio) ||
         uri.hasPrefix(sonosApiHLS) || uri.hasPrefix(sonosApiHLSStatic)
     }
+
+    /// Extracts the numeric Apple Music catalog song ID from a Sonos URI.
+    /// Matches `x-sonosapi-hls-static:song%3a<ID>?…` and
+    /// `x-sonos-http:song%3a<ID>.mp4?…`. Returns nil for any other shape.
+    public static func appleMusicSongID(from uri: String) -> String? {
+        guard uri.hasPrefix(sonosApiHLSStatic) || uri.hasPrefix(sonosHTTP) else { return nil }
+        let decoded = uri.removingPercentEncoding ?? uri
+        guard let range = decoded.range(of: "song:") else { return nil }
+        let digits = decoded[range.upperBound...].prefix { $0.isNumber }
+        return digits.isEmpty ? nil : String(digits)
+    }
 }
 
 // MARK: - Known Service IDs
@@ -49,6 +60,14 @@ public enum ServiceID {
     public static let qobuz = 31
     public static let calmRadio = 144
     public static let soundCloud = 160
+    /// SomaFM Radio — `Auth="Anonymous"`, browses without a token via the
+    /// anonymous SMAPI path. Surfaced as a toggle-gated browse entry.
+    public static let somaFM = 516
+    /// App-internal pseudo-sid for Suno (suno.com). Suno is NOT a Sonos SMAPI
+    /// service — playback resolves public CDN URLs — so this id only drives the
+    /// Music Services toggle row and never reaches a SMAPI call. Chosen well
+    /// above any real Sonos sid to avoid collisions.
+    public static let sunoPseudo = 990001
     public static let tidal = 174
     public static let amazonMusic = 201
     public static let appleMusic = 204
@@ -73,6 +92,7 @@ public enum ServiceID {
         qobuz: "Qobuz",
         calmRadio: "Calm Radio",
         soundCloud: "SoundCloud",
+        somaFM: "SomaFM Radio",
         tidal: "TIDAL",
         amazonMusic: "Amazon Music",
         appleMusic: "Apple Music",
@@ -110,6 +130,45 @@ public enum ServiceName {
     public static let radioParadise = "Radio Paradise"
     public static let siriusXM = "SiriusXM"
     public static let local = "Local"
+    public static let suno = "Suno"
+
+    /// Resolves the source/streaming service for a track resource URI.
+    /// Single classifier shared by play-history, the queue source line, and
+    /// the save-queue destination gate so they never disagree. Returns the
+    /// service name (e.g. "Apple Music", "TuneIn", "Music Library"), not the
+    /// station/track title. `nil`/empty URI → `local`.
+    public static func resolve(uri: String?) -> String {
+        guard let uri, !uri.isEmpty else { return local }
+        let decoded = (uri.removingPercentEncoding ?? uri).replacingOccurrences(of: "&amp;", with: "&")
+        // sid= identifies the specific SMAPI service first (most precise).
+        if let range = decoded.range(of: "sid=") {
+            let numStr = String(decoded[range.upperBound...].prefix(while: { $0.isNumber }))
+            if let sid = Int(numStr), let name = ServiceID.knownNames[sid] { return name }
+        }
+        if URIPrefix.isLocal(uri) { return musicLibrary }
+        if decoded.contains("suno") { return suno }
+        // TIDAL plays via a resolved `audio.tidal.com` CDN URL with no sid=,
+        // so the host substring is the only signal at this layer.
+        if decoded.contains("tidal") { return tidal }
+        if URIPrefix.isRadio(uri) { return radio }
+        if decoded.contains("spotify") { return spotify }
+        if decoded.contains("apple") { return appleMusic }
+        if decoded.contains("amazon") || decoded.contains("amzn") { return amazonMusic }
+        return streaming
+    }
+
+    /// SF Symbol used as the source badge for a service. Generic glyph for
+    /// services without a dedicated icon.
+    public static func icon(for service: String) -> String {
+        switch service {
+        case suno: return "waveform"
+        case radio, sonosRadio, calmRadio, tuneIn, radioParadise, siriusXM:
+            return "antenna.radiowaves.left.and.right"
+        case musicLibrary, localLibrary, local: return "internaldrive"
+        case sonosPlaylist: return "music.note.list"
+        default: return "music.note.tv"
+        }
+    }
 }
 
 // MARK: - SA_RINCON Mappings
@@ -251,6 +310,8 @@ public enum UDKey {
     public static let artOverridePrefix = "artOverride:"
     public static let tuneInSearchEnabled = "tuneInSearchEnabled"
     public static let calmRadioEnabled = "calmRadioEnabled"
+    public static let somaFMEnabled = "somaFMEnabled"
+    public static let sunoEnabled = "sunoEnabled"
     public static let appleMusicSearchEnabled = "appleMusicSearchEnabled"
     /// Mirrors the live MusicKit authorisation state to a fast-readable
     /// @AppStorage flag — BrowseView consults it to auto-show / auto-
@@ -275,6 +336,7 @@ public enum UDKey {
     /// allocator's computed default). `Double` because `@AppStorage`
     /// can't represent `Optional<CGFloat>` directly.
     public static let userBrowseWidth = "userBrowseWidth"
+    public static let userQueueWidth = "userQueueWidth"
     /// Global lyrics timing offset in seconds. Applied on top of the
     /// per-track manual offset (the `±` toolbar in the lyrics panel).
     /// Default `-2.0` empirically — Sonos position polling typically

@@ -30,7 +30,15 @@ public protocol TransportStrategy: AnyObject {
     func start(groups: [SonosGroup], devices: [String: SonosDevice]) async
     func stop() async
     func onGroupsChanged(_ groups: [SonosGroup], devices: [String: SonosDevice]) async
+    /// Rebuild any network-bound state (e.g. UPnP event SUBSCRIBE
+    /// callback URLs) after the host's network path changed. Default
+    /// empty — only event-driven strategies need to rebind.
+    func restartForNetworkChange() async
     var delegate: TransportStrategyDelegate? { get set }
+}
+
+public extension TransportStrategy {
+    func restartForNetworkChange() async {}
 }
 
 @MainActor
@@ -78,6 +86,21 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     private var currentGroups: [SonosGroup] = []
     private var currentDevices: [String: SonosDevice] = [:]
     private var isRunning = false
+
+    // Per-session liveness cache: skip the SUBSCRIBE attempt for devices
+    // that don't respond to a quick `device_description.xml` probe.
+    // Stale cached speakers (different network / decommissioned /
+    // powered off) would otherwise burn ~10 s timeout each on the
+    // SUBSCRIBE call AND register a callback the device will never
+    // honour. Probed once per (re)start; refreshed by
+    // `restartForNetworkChange()` because that calls stop()+start().
+    private var liveDeviceIDs: Set<String> = []
+    /// Consecutive failed liveness probes per device. A device must miss two
+    /// probes in a row before it's dropped from `liveDeviceIDs` — a single
+    /// 2.5 s timeout under network contention shouldn't sever a working
+    /// subscription (the cause of the 5 s now-playing display lag).
+    private var consecutiveProbeMisses: [String: Int] = [:]
+    private static let livenessProbeTimeout: TimeInterval = 2.5
 
     // Track which service paths map to which device/group for routing events
     private var sidToDevice: [String: String] = [:]   // SID → deviceID
@@ -191,6 +214,15 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
         clearAllSIDs()
     }
 
+    public func restartForNetworkChange() async {
+        guard isRunning else { return }
+        let groups = currentGroups
+        let devices = currentDevices
+        sonosDebugLog("[TRANSPORT] Network path changed — rebuilding event subscriptions (\(groups.count) groups, \(devices.count) devices)")
+        await stop()
+        await start(groups: groups, devices: devices)
+    }
+
     public func onGroupsChanged(_ groups: [SonosGroup], devices: [String: SonosDevice]) async {
         let oldGroupIDs = Set(currentGroups.map(\.id))
         currentGroups = groups
@@ -224,6 +256,8 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
 
     private func subscribeToAll(groups: [SonosGroup], devices: [String: SonosDevice]) async {
         guard let subManager = subscriptionManager else { return }
+
+        await probeLiveness(devices: devices)
 
         // Take thread-safe snapshots
         let (deviceSnapshot, serviceSnapshot) = snapshotSIDs()
@@ -272,6 +306,10 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
     }
 
     private func subscribeToService(device: SonosDevice, path: String, serviceType: String, manager: EventSubscriptionManager) async {
+        guard liveDeviceIDs.contains(device.id) else {
+            sonosDebugLog("[TRANSPORT] Skipping SUBSCRIBE for unreachable \(device.roomName) \(serviceType) — liveness probe failed")
+            return
+        }
         do {
             let sub = try await manager.subscribe(device: device, servicePath: path)
             setSID(sub.sid, device: device.id, service: serviceType)
@@ -284,6 +322,85 @@ public final class HybridEventFirstTransport: TransportStrategy, @unchecked Send
                 sonosDebugLog("[RC-SUB] FAIL room=\(device.roomName) id=\(device.id) error=\(error)")
             }
         }
+    }
+
+    /// Parallel probe of `device_description.xml` for every device.
+    /// 2.5 s timeout each, 8-way bounded concurrency. Result is a set
+    /// of `device.id`s that responded; the SUBSCRIBE gate consults this
+    /// set so dead speakers don't burn their full ~10 s SUBSCRIBE
+    /// timeout AND don't get a callback registered against a URL we
+    /// can't reach back on. Devices stay in the sidebar — eviction is
+    /// out of scope here (live discovery will refresh them when they
+    /// come back).
+    private func probeLiveness(devices: [String: SonosDevice]) async {
+        let unique = Array(devices.values)
+        guard !unique.isEmpty else {
+            liveDeviceIDs = []
+            return
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = Self.livenessProbeTimeout
+        config.timeoutIntervalForResource = Self.livenessProbeTimeout
+        let session = URLSession(configuration: config)
+        let alive: Set<String> = await withTaskGroup(of: String?.self) { group in
+            var nextIdx = 0
+            var inFlight = 0
+            let maxConcurrent = 8
+            while nextIdx < unique.count && inFlight < maxConcurrent {
+                let d = unique[nextIdx]
+                group.addTask { await Self.probe(device: d, session: session) }
+                nextIdx += 1
+                inFlight += 1
+            }
+            var hits: Set<String> = []
+            for await result in group {
+                inFlight -= 1
+                if let id = result { hits.insert(id) }
+                if nextIdx < unique.count {
+                    let d = unique[nextIdx]
+                    group.addTask { await Self.probe(device: d, session: session) }
+                    nextIdx += 1
+                    inFlight += 1
+                }
+            }
+            return hits
+        }
+        // Hysteresis: keep a previously-live device through ONE missed probe.
+        // A single 2.5 s timeout (common under transient network contention)
+        // would otherwise drop the device, skip its SUBSCRIBE, and force its
+        // now-playing/transport state onto slow polling — the 5 s display lag.
+        // A device must miss two probes in a row to actually be dropped.
+        var newLive: Set<String> = []
+        for d in unique {
+            if alive.contains(d.id) {
+                consecutiveProbeMisses[d.id] = 0
+                newLive.insert(d.id)
+            } else {
+                let misses = (consecutiveProbeMisses[d.id] ?? 0) + 1
+                consecutiveProbeMisses[d.id] = misses
+                if misses < 2 && liveDeviceIDs.contains(d.id) {
+                    newLive.insert(d.id)  // grace — was live, first miss
+                }
+            }
+        }
+        liveDeviceIDs = newLive
+        let dead = unique.count - newLive.count
+        if dead > 0 {
+            sonosDebugLog("[TRANSPORT] Liveness probe: \(newLive.count)/\(unique.count) live (\(alive.count) probed OK, \(newLive.count - alive.count) held on grace), skipping SUBSCRIBE for \(dead)")
+        }
+    }
+
+    private static func probe(device: SonosDevice, session: URLSession) async -> String? {
+        guard let url = URL(string: "http://\(device.ip):\(device.port)/xml/device_description.xml") else { return nil }
+        do {
+            let (_, response) = try await session.data(from: url)
+            if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+                return device.id
+            }
+        } catch {
+            // timeout / connection refused / unreachable — treat as dead for this session
+        }
+        return nil
     }
 
     private func resubscribe(_ expiredSub: EventSubscription) async {

@@ -31,6 +31,21 @@ public final class RenderingControlService {
         )
     }
 
+    /// Whether the device's line-out volume is set to Fixed. Connect / Port /
+    /// Amp line-outs can be locked to a fixed level in the Sonos app; when
+    /// fixed, `SetVolume` faults UPnP 501 (issue #50). Returns false on any
+    /// error so a transient failure doesn't disable the slider.
+    public func getOutputFixed(device: SonosDevice) async -> Bool {
+        guard let result = try? await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: Self.service,
+            action: "GetOutputFixed",
+            arguments: [("InstanceID", "0")]
+        ) else { return false }
+        return result["CurrentFixed"] == "1"
+    }
+
     public func getMute(device: SonosDevice) async throws -> Bool {
         let result = try await soap.send(
             to: device.baseURL,

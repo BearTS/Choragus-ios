@@ -395,13 +395,13 @@ public final class ServiceSearchProvider {
         """
     }
 
-    /// Track-class DIDL with `<res>` for queue-based playback of a
-    /// finite media file (podcast episode). The `protocolInfo` reflects
-    /// the resolved media type so the speaker advertises the right MIME
-    /// to its decoder. Used by AddURIToQueue when the URI is an HTTPS
-    /// direct URL that the legacy `x-rincon-mp3radio://` scheme can't
-    /// reach.
-    public func buildResolvedTuneInTrackDIDL(title: String, artist: String, url: String, mediaType: String) -> String {
+    /// Track-class DIDL with `<res>` for queue-based playback of a finite
+    /// HTTP(S) media file (TuneIn podcast episode, Suno CDN MP3, etc.). The
+    /// `protocolInfo` reflects the resolved media type so the speaker
+    /// advertises the right MIME to its decoder. Used by AddURIToQueue when
+    /// the URI is an HTTPS direct URL that the legacy `x-rincon-mp3radio://`
+    /// scheme can't reach.
+    public func buildDirectHTTPTrackDIDL(title: String, artist: String, url: String, mediaType: String, albumArtURI: String? = nil) -> String {
         let protocolInfo: String
         switch mediaType.lowercased() {
         case "aac":  protocolInfo = "http-get:*:audio/aac:*"
@@ -409,8 +409,17 @@ public final class ServiceSearchProvider {
         case "hls":  protocolInfo = "http-get:*:application/vnd.apple.mpegurl:*"
         default:     protocolInfo = "http-get:*:audio/mpeg:*"
         }
+        // Embed the cover art so it travels with the track — the speaker and
+        // queue browse return it, so artwork shows without relying on the
+        // app-side per-URI art cache.
+        let art: String
+        if let a = albumArtURI, !a.isEmpty {
+            art = "<upnp:albumArtURI>\(xmlEscape(a))</upnp:albumArtURI>"
+        } else {
+            art = ""
+        }
         return """
-        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:class>object.item.audioItem.musicTrack</upnp:class><res protocolInfo="\(protocolInfo)">\(xmlEscape(url))</res></item></DIDL-Lite>
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="-1" parentID="-1" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator>\(art)<upnp:class>object.item.audioItem.musicTrack</upnp:class><res protocolInfo="\(protocolInfo)">\(xmlEscape(url))</res></item></DIDL-Lite>
         """
     }
 
@@ -803,6 +812,64 @@ public final class ServiceSearchProvider {
         """
     }
 
+    /// DIDL for re-queuing a play-history entry. Picks the correct cdudn by URI
+    /// type so `AddURIToQueue` doesn't fault UPnP 800:
+    ///   - local library (`x-file-cifs`) → `RINCON_AssociatedZPUDN`
+    ///   - SMAPI service track (has `sid=`) → the auth-aware service cdudn,
+    ///     identical to what browse/search build (a `-0-Token` anonymous form
+    ///     faults on authenticated services like Spotify)
+    ///   - otherwise → generic anonymous cdudn.
+    public func buildHistoryReplayDIDL(uri: String, title: String, artist: String,
+                                       album: String, albumArtURI: String?) -> String {
+        let catalog = MusicServiceCatalog.shared
+        let cdudn: String
+        let itemID: String
+        let parentID: String
+        if URIPrefix.isLocal(uri) {
+            cdudn = "RINCON_AssociatedZPUDN"
+            itemID = "10032020history"
+            parentID = ""
+        } else if let sid = Self.extractSid(from: uri) {
+            // Service track: the DIDL item id must encode the actual track
+            // (prefix + the URI's already-%3a-encoded item id) — a generic
+            // placeholder id faults AddURIToQueue with UPnP 800 on Spotify and
+            // other SMAPI services. Mirrors `buildSMAPIDIDL`.
+            cdudn = catalog.cdudn(forSid: sid, authToken: authToken(forSid: sid))
+            itemID = catalog.didlTrackIdPrefix(forSid: sid) + Self.encodedItemID(from: uri)
+            parentID = "-1"
+        } else {
+            cdudn = "SA_RINCON65031_"
+            itemID = "10032020history"
+            parentID = ""
+        }
+        var artElement = ""
+        if let art = albumArtURI, !art.isEmpty {
+            artElement = "<upnp:albumArtURI>\(xmlEscape(art))</upnp:albumArtURI>"
+        }
+        return """
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item id="\(itemID)" parentID="\(parentID)" restricted="true"><dc:title>\(xmlEscape(title))</dc:title><dc:creator>\(xmlEscape(artist))</dc:creator><upnp:album>\(xmlEscape(album))</upnp:album>\(artElement)<upnp:class>object.item.audioItem.musicTrack</upnp:class><desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">\(cdudn)</desc></item></DIDL-Lite>
+        """
+    }
+
+    /// Extracts the `sid=<n>` service id from a service URI, or nil.
+    static func extractSid(from uri: String) -> Int? {
+        guard let r = uri.range(of: "sid=") else { return nil }
+        let digits = uri[r.upperBound...].prefix { $0.isNumber }
+        return Int(digits)
+    }
+
+    /// The SMAPI item id embedded in a service URI: the part after the scheme
+    /// colon and before the query (already `%3a`-encoded), e.g.
+    /// `x-sonos-spotify:spotify%3atrack%3aID?sid=…` → `spotify%3atrack%3aID`.
+    static func encodedItemID(from uri: String) -> String {
+        guard let schemeColon = uri.firstIndex(of: ":") else { return uri }
+        let afterScheme = uri[uri.index(after: schemeColon)...]
+        if let q = afterScheme.firstIndex(of: "?") {
+            return String(afterScheme[..<q])
+        }
+        return String(afterScheme)
+    }
+
     // MARK: - Per-Service URI Construction
 
     /// RINCON service type for the runtime sid the speaker reports.
@@ -896,7 +963,16 @@ public final class ServiceSearchProvider {
         // resolved URL carries credentials and plays with empty DIDL.
         // Mark the strategy here so SonosManager.playBrowseItem dispatches
         // correctly without inferring from the objectID prefix.
-        item.playbackStrategy = .smapiResolveThenEmpty
+        //
+        // Exception: SomaFM (anonymous radio) streams play via the
+        // `x-sonosapi-stream:` broadcast form directly. Resolving them to the
+        // raw HLS/PLS URL and SetAVTransportURI'ing that faults UPnP 701 — the
+        // speaker must resolve the broadcast itself.
+        if serviceID == ServiceID.somaFM && smapi.itemType == "stream" {
+            item.playbackStrategy = .directURIWithDIDL
+        } else {
+            item.playbackStrategy = .smapiResolveThenEmpty
+        }
         return item
     }
 

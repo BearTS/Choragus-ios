@@ -22,6 +22,7 @@ struct BrowseView: View {
         return id == "APPLEMUSICPROMPT:" || id == "APPLEMUSICKIT:" ||
                id == "TUNEINPROMPT:" ||
                id == "CALMRADIOPROMPT:" || id == "SONOSRADIOPROMPT:" ||
+               id == "SUNOPROMPT:" || id.hasPrefix("SOMAFMPROMPT:") ||
                id == "RECENT:" || id.hasPrefix("SMAPISEARCHPROMPT:") ||
                id.hasPrefix("SMAPI:") || id.hasPrefix("SERVICESEARCH:")
     }
@@ -123,10 +124,29 @@ struct BrowseView: View {
                     CalmRadioBrowseView(group: group)
                 } else if current.objectID == "SONOSRADIOPROMPT:" {
                     SonosRadioSearchView(group: group)
+                } else if current.objectID == "SUNOPROMPT:" {
+                    SunoSearchView(group: group)
                 } else if current.objectID.hasPrefix("PLEXDIRECT:") {
                     PlexDirectBrowseView(group: group)
                 } else if current.objectID == "LINEIN:" {
                     LineInBrowseView(group: group)
+                } else if current.objectID.hasPrefix("SOMAFMPROMPT:") {
+                    // SomaFM is Auth="Anonymous" — browse via the generic
+                    // BrowseListView, which uses the anonymous SMAPI path
+                    // (no token). The token-only SMAPIServiceSearchView can't
+                    // serve it.
+                    BrowseListView(
+                        title: "SomaFM",
+                        objectID: BrowseID.smapiRoot,
+                        group: group,
+                        sonosManager: sonosManager,
+                        smapiServiceID: ServiceID.somaFM,
+                        smapiServiceURI: smapiManager.availableServices.first(where: { $0.id == ServiceID.somaFM })?.secureUri,
+                        smapiAuthType: "Anonymous",
+                        onNavigate: { dest in breadcrumbs.append(dest) }
+                    )
+                    .id(current.objectID)
+                    .environmentObject(sonosManager)
                 } else if current.objectID.hasPrefix("SMAPISEARCHPROMPT:") {
                     let sidStr = current.objectID.replacingOccurrences(of: "SMAPISEARCHPROMPT:", with: "")
                     let sid = Int(sidStr) ?? 0
@@ -267,6 +287,8 @@ struct BrowseSectionsView: View {
     @AppStorage("browse_musicServices_expanded") private var musicServicesExpanded = true
     @AppStorage(UDKey.tuneInSearchEnabled) private var tuneInEnabled = false
     @AppStorage(UDKey.calmRadioEnabled) private var calmRadioEnabled = false
+    @AppStorage(UDKey.somaFMEnabled) private var somaFMEnabled = false
+    @AppStorage(UDKey.sunoEnabled) private var sunoEnabled = false
     @AppStorage(UDKey.appleMusicSearchEnabled) private var appleMusicEnabled = false
     @AppStorage(UDKey.appleMusicKitConnected) private var appleMusicKitConnected = false
     @AppStorage(UDKey.sonosRadioEnabled) private var sonosRadioEnabled = false
@@ -325,8 +347,17 @@ struct BrowseSectionsView: View {
         if calmRadioEnabled {
             entries.append(ServiceSearchEntry(key: "calmradio", title: "Calm Radio", objectID: "CALMRADIOPROMPT:", icon: "leaf"))
         }
+        if somaFMEnabled {
+            entries.append(ServiceSearchEntry(key: "somafm", title: "SomaFM", objectID: "SOMAFMPROMPT:", icon: "radio"))
+        }
         if sonosRadioEnabled {
             entries.append(ServiceSearchEntry(key: "sonosradio", title: "Sonos Radio", objectID: "SONOSRADIOPROMPT:", icon: "antenna.radiowaves.left.and.right"))
+        }
+        // suno.ai — paste a public suno.com link to play an AI-generated song.
+        // Not a Sonos service (no SMAPI sid / account): the link resolves to a
+        // direct CDN MP3 played queue-based. Gated by the Music Services toggle.
+        if sunoEnabled {
+            entries.append(ServiceSearchEntry(key: "suno", title: "suno.ai", objectID: "SUNOPROMPT:", icon: "waveform"))
         }
         // Plex's two flavors are wholly independent — Local (direct PMS
         // via PlexAuthManager PIN flow) and Cloud (SMAPI relay). Show
@@ -420,7 +451,12 @@ struct BrowseSectionsView: View {
                     if serviceSearchExpanded {
                         ForEach(Array(serviceEntries.enumerated()), id: \.element.id) { index, entry in
                             Button {
-                                onNavigate(BrowseDestination(title: entry.title, objectID: entry.objectID))
+                                if entry.key == "suno" {
+                                    // Suno opens the embedded browser popup, not an in-panel view.
+                                    WindowManager.shared.openSunoExploreForActiveGroup()
+                                } else {
+                                    onNavigate(BrowseDestination(title: entry.title, objectID: entry.objectID))
+                                }
                             } label: {
                                 Label(entry.title, systemImage: entry.icon)
                             }
@@ -1919,6 +1955,126 @@ struct CalmRadioBrowseView: View {
                 isLoading = false
             }
         }
+    }
+}
+
+// MARK: - Suno (public AI-song links)
+
+/// Paste a public suno.com link (share `…/s/<code>` or song `…/song/<uuid>`)
+/// and play it on the selected group. Suno isn't a Sonos service — the link
+/// resolves to a direct CDN MP3 that plays via the queue-based HTTP-get path
+/// (`BrowsePlaybackStrategy.directHTTPSQueue`). Public songs only; no sign-in.
+struct SunoSearchView: View {
+    @EnvironmentObject var sonosManager: SonosManager
+    let group: SonosGroup?
+
+    @State private var linkText = ""
+    @State private var isResolving = false
+    @State private var resolved: BrowseItem?
+    @State private var errorText: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                TextField("Paste a suno.com song link", text: $linkText)
+                    .textFieldStyle(.plain)
+                    .font(.callout)
+                    .onSubmit { submit() }
+                if !linkText.isEmpty {
+                    Button {
+                        linkText = ""
+                        errorText = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button(action: submit) {
+                    if isResolving {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Play")
+                    }
+                }
+                .disabled(linkText.trimmingCharacters(in: .whitespaces).isEmpty || isResolving || group == nil)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+
+            if let errorText {
+                Text(errorText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+            }
+
+            Divider()
+
+            if let item = resolved {
+                List {
+                    BrowseItemRow(item: item)
+                        .contentShape(Rectangle())
+                        .onTapGesture { play(item) }
+                        .contextMenu {
+                            if let group = group {
+                                Button(L10n.playNow) { play(item) }
+                                Button(L10n.playNext) {
+                                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group, playNext: true) }
+                                }
+                                Button(L10n.addToQueue) {
+                                    Task { try? await sonosManager.addBrowseItemToQueue(item, in: group) }
+                                }
+                            }
+                        }
+                }
+                .listStyle(.plain)
+            } else {
+                VStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .font(.title)
+                        .foregroundStyle(.secondary)
+                    Text("Paste a public Suno song link to play it here.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding()
+            }
+        }
+    }
+
+    private func submit() {
+        let input = linkText.trimmingCharacters(in: .whitespaces)
+        guard !input.isEmpty, let group = group, !isResolving else { return }
+        errorText = nil
+        isResolving = true
+        Task {
+            do {
+                let item = try await SunoResolver.resolve(input)
+                await MainActor.run {
+                    resolved = item
+                    isResolving = false
+                }
+                try? await sonosManager.playBrowseItem(item, in: group)
+            } catch {
+                await MainActor.run {
+                    errorText = "Couldn't read that link. Use a public suno.com song link."
+                    isResolving = false
+                }
+            }
+        }
+    }
+
+    private func play(_ item: BrowseItem) {
+        guard let group = group else { return }
+        Task { try? await sonosManager.playBrowseItem(item, in: group) }
     }
 }
 

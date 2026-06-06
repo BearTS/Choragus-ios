@@ -43,6 +43,23 @@ Why the favourited-song step? Sonos generates an internal account identifier the
 
 ---
 
+## What's New in v4.11
+
+A feature release — three new services, save-queue-to-playlist, history actions, and a batch of playback and metadata fixes.
+
+- **TIDAL is a connectable service now.** Browse, search, play, and queue TIDAL with artwork, the same as any other service.
+- **Explore Suno.ai — AI-generated music, subscription-free, without leaving the app.** A first attempt at bringing a non-Sonos service directly into the Sonos system. A built-in browser plays public Suno songs and playlists to your speakers with cover art, genre, artist, and lyrics. Toggle it on under Settings → Music Services — no auth required.
+- **SomaFM connects and plays.** The anonymous SomaFM stations now browse and play.
+- **Save the queue as an Apple Music playlist.** One button saves the current queue to a Sonos playlist — or to an Apple Music playlist when every track is from Apple Music.
+- **Act on your history with a right-click.** Play, Play Next, or Add to Queue straight from any history entry, and filter history by room more precisely.
+- **Fixed-volume speakers behave.** Speakers set to fixed or line-out volume no longer show a slider that does nothing, and an active line-in shows which speaker it comes from.
+- **Refresh your local music library from Settings.** Re-scan your NAS or shared-folder music under Music Services; it runs on both S1 and S2 systems automatically.
+- **Right details, right track.** Apple Music tracks show the correct title, artist, and art instead of leftover details from the previous song, and replaying from history plays the track you picked. The queue is resizable and shows each track's source, and Settings plus the Apple Music browser are more fully translated.
+
+Full change list in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## What's New in v4.10
 
 Efficiency and polish release. No new features — many small wins for everyday use.

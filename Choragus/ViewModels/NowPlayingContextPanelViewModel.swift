@@ -92,6 +92,16 @@ final class NowPlayingContextPanelViewModel {
     private func loadAbout(_ metadata: TrackMetadata) async {
         if case .loaded = aboutState { return }
         if case .loading = aboutState { return }
+        // Suno tracks: the "artist" is the Suno creator, which Last.fm /
+        // Wikipedia don't know. Populate the About card from Suno's own creator
+        // profile (avatar, bio) plus the track's style tags instead.
+        if let uri = metadata.trackURI, let uuid = SunoCatalog.uuid(fromURI: uri) {
+            aboutState = .loading
+            artistInfo = await SunoResolver.artistProfile(forUUID: uuid)
+            albumInfo = nil
+            aboutState = .loaded
+            return
+        }
         // On radio, the `artist` field frequently carries the station or
         // soundtrack name rather than the actual performing artist (e.g.
         // station "Movie Ticket Radio" reports artist="Animal House").

@@ -11,6 +11,9 @@ struct VolumeControlView: View {
     @Binding var speakerVolumes: [String: Double]
     @Binding var speakerMutes: [String: Bool]
     var accentColor: Color = .accentColor
+    /// Member IDs whose line-out is fixed (Connect/Port/Amp) — their slider is
+    /// disabled since SetVolume is rejected with UPnP 501 (issue #50).
+    var fixedDeviceIDs: Set<String> = []
     var onSetVolume: ((SonosDevice, Int) async -> Void)?
     var onToggleMute: ((SonosDevice, Bool) async -> Void)?
     var onDragStateChanged: ((Bool) -> Void)?
@@ -147,6 +150,8 @@ struct VolumeControlView: View {
                     }
                     .frame(maxWidth: 300)
                     .alignmentGuide(.sliderCenter) { d in d[HorizontalAlignment.center] }
+                    .disabled(fixedDeviceIDs.contains(member.id))
+                    .help(fixedDeviceIDs.contains(member.id) ? L10n.fixedLineOutVolume : "")
 
                     // 32 = 24pt visible width + 8pt of leading slack so
                     // the right edge lines up with the master row's
@@ -156,7 +161,7 @@ struct VolumeControlView: View {
                     // content). Trailing alignment puts the text at
                     // the frame's right edge; the slack lives between
                     // the slider and the digits where the click goes.
-                    Text("\(Int(speakerVolumes[member.id] ?? 0))")
+                    Text(fixedDeviceIDs.contains(member.id) ? L10n.fixedShort : "\(Int(speakerVolumes[member.id] ?? 0))")
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .frame(width: 32, alignment: .trailing)

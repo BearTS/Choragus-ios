@@ -5,9 +5,42 @@ import UniformTypeIdentifiers
 
 struct PlayHistoryView: View {
     @EnvironmentObject var historyManager: PlayHistoryManager
+    @EnvironmentObject var sonosManager: SonosManager
+
+    private enum HistoryPlayMode { case now, next, queue }
+
+    /// Replays a history entry on the currently-selected group. Play-now uses
+    /// the direct-URI path; next/queue build a DIDL-carrying BrowseItem so the
+    /// queue row renders correctly.
+    private func playHistoryEntry(_ entry: PlayHistoryEntry, mode: HistoryPlayMode) {
+        guard let group = HistoryPlayback.targetGroup(sonosManager),
+              let uri = entry.sourceURI, !uri.isEmpty else { return }
+        Task {
+            do {
+                switch mode {
+                case .now:
+                    try await sonosManager.playURI(
+                        group: group, uri: uri,
+                        title: entry.stationName.isEmpty ? entry.title : entry.stationName,
+                        artist: entry.stationName.isEmpty ? entry.artist : "",
+                        stationName: entry.stationName,
+                        albumArtURI: entry.albumArtURI
+                    )
+                case .next, .queue:
+                    guard let item = HistoryPlayback.browseItem(from: entry) else { return }
+                    _ = try await sonosManager.addBrowseItemToQueue(item, in: group, playNext: mode == .next)
+                }
+            } catch {
+                sonosDebugLog("[HISTORY] replay failed (\(mode)): \(error.localizedDescription)")
+            }
+        }
+    }
 
     @State private var searchText = ""
     @State private var filterRoom: String?
+    /// false = Includes (group contains the selected room/grouping);
+    /// true = Exact (group equals the selection).
+    @State private var filterRoomExact = false
     @State private var filterSource: String?
     @State private var filterStarred = false
     @State private var filterDateRange: DateRange = .all
@@ -85,10 +118,22 @@ struct PlayHistoryView: View {
         let bounds = dateBounds
         var results = historyManager.queryFiltered(
             since: bounds.since, until: bounds.until,
-            room: filterRoom, source: filterSource,
+            room: nil, source: filterSource,
             searchText: searchText.isEmpty ? nil : searchText,
             sortNewestFirst: sortNewestFirst
         )
+        // Room matching is done here (not in SQL) so "Office" matches by token
+        // membership — i.e. "Office", "Office + Float", … but NOT "Office Front"
+        // — and Exact matches the full grouping. The selection may itself be a
+        // grouping ("Office + Float"), so split it into tokens too.
+        if let room = filterRoom {
+            let tokens = room.components(separatedBy: " + ")
+            results = results.filter { e in
+                if filterRoomExact { return e.groupName == room }
+                let members = e.groupName.components(separatedBy: " + ")
+                return tokens.allSatisfy { members.contains($0) }
+            }
+        }
         if filterStarred {
             results = results.filter(\.starred)
         }
@@ -148,7 +193,9 @@ struct PlayHistoryView: View {
                 }, onStar: { entry in
                     historyManager.toggleStar(id: entry.id)
                     refreshFilteredEntries()
-                })
+                }, onPlay: { entry in playHistoryEntry(entry, mode: .now) },
+                   onPlayNext: { entry in playHistoryEntry(entry, mode: .next) },
+                   onAddToQueue: { entry in playHistoryEntry(entry, mode: .queue) })
             default:
                 PlayHistoryDashboard(entries: filteredEntriesUnsorted, expandedArtEntry: $expandedArtEntry)
                     .environmentObject(historyManager)
@@ -229,6 +276,7 @@ struct PlayHistoryView: View {
         }
         .onChange(of: filterDateRange) { refreshFilteredEntries() }
         .onChange(of: filterRoom) { refreshFilteredEntries() }
+        .onChange(of: filterRoomExact) { refreshFilteredEntries() }
         .onChange(of: filterSource) { refreshFilteredEntries() }
         .onChange(of: sortNewestFirst) { refreshFilteredEntries() }
         .onChange(of: customDateFrom) { refreshFilteredEntries() }
@@ -292,11 +340,22 @@ struct PlayHistoryView: View {
             Picker("", selection: $filterRoom) {
                 Label(L10n.allRooms, systemImage: "hifispeaker.2").tag(String?.none)
                 Divider()
-                ForEach(historyManager.uniqueRooms, id: \.self) { room in
+                ForEach(historyManager.roomFilterOptions, id: \.self) { room in
                     Text(room).tag(Optional(room))
                 }
             }
             .fixedSize()
+
+            // Includes (any group containing the room) vs Exact (that grouping
+            // only). Shown only when a room filter is active.
+            if filterRoom != nil {
+                Picker("", selection: $filterRoomExact) {
+                    Text(L10n.roomMatchIncludes).tag(false)
+                    Text(L10n.roomMatchExact).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+            }
 
             // Source
             Picker("", selection: $filterSource) {

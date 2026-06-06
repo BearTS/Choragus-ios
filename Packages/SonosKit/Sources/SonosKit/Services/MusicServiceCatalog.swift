@@ -424,6 +424,18 @@ public final class MusicServiceCatalog: ObservableObject, @unchecked Sendable {
                 supportsAppLink: true,
                 defaultSerialNumber: 1
             ),
+            // SomaFM — anonymous radio. Stations play via the
+            // `x-sonosapi-stream:<id>` broadcast form with `sn=0`; the
+            // speaker resolves the actual HLS/PLS stream itself. Name must
+            // match the household descriptor ("SomaFM Radio") so rules(forSid:)
+            // resolves it.
+            ServiceRules(
+                canonicalName: "SomaFM Radio",
+                streamURIScheme: URIPrefix.sonosApiStream,
+                streamPlaybackFlags: 8224,
+                supportsAppLink: false,
+                defaultSerialNumber: 0
+            ),
             ServiceRules(
                 canonicalName: ServiceName.youTubeMusic,
                 trackURIScheme: URIPrefix.sonosHTTP,

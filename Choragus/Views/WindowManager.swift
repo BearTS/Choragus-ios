@@ -25,6 +25,7 @@ final class WindowManager {
     private var diagnosticsWindow: NSWindow?
     private var clubVisWindow: NSWindow?
     private var clubVisDebugWindow: NSWindow?
+    private var sunoExploreWindow: NSWindow?
 
     func openPlayHistory() {
         if let existing = playHistoryWindow, existing.isVisible {
@@ -43,9 +44,10 @@ final class WindowManager {
     }
 
     private func showPlayHistoryWindow() {
-        guard let manager = playHistoryManager else { return }
+        guard let manager = playHistoryManager, let sonos = sonosManager else { return }
         let view = PlayHistoryView()
             .environmentObject(manager)
+            .environmentObject(sonos)
             .preferredColorScheme(colorScheme)
         // Default to 1440 × 810 (16:9, 75 % of 1080p) — same as the
         // karaoke window so the stats and karaoke popouts share a
@@ -446,6 +448,61 @@ final class WindowManager {
             origin.y = max(screen.minY, min(origin.y, screen.maxY - size.height))
         }
         window.setFrameOrigin(origin)
+    }
+
+    // MARK: - Suno Explore (embedded suno.com browser)
+
+    func openSunoExploreForActiveGroup() {
+        guard let manager = sonosManager else { return }
+        let lastID = UserDefaults.standard.string(forKey: UDKey.lastSelectedGroupID)
+        let group = manager.groups.first(where: { $0.id == lastID }) ?? manager.groups.first
+        openSunoExplore(group: group)
+    }
+
+    private static let sunoExploreWindowIdentifier = NSUserInterfaceItemIdentifier("ChoragusSunoExplore")
+
+    /// `group` may be nil — the browser still opens so the user can browse
+    /// Suno; the playback toolbar reads the live selection at action time.
+    func openSunoExplore(group: SonosGroup?) {
+        sonosDebugLog("[SUNO] openSunoExplore enter group=\(group?.name ?? "nil") managerSet=\(sonosManager != nil)")
+        if let existing = sunoExploreWindow,
+           existing.isVisible, existing.isOnActiveSpace, !existing.isMiniaturized {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        if let stale = sunoExploreWindow {
+            stale.setFrameAutosaveName("")
+            stale.contentViewController = nil
+            stale.close()
+            sunoExploreWindow = nil
+        }
+        for win in NSApp.windows where win.identifier == Self.sunoExploreWindowIdentifier {
+            win.setFrameAutosaveName("")
+            win.contentViewController = nil
+            win.close()
+        }
+
+        guard let manager = sonosManager else { return }
+
+        let view = SunoExploreWindow().environmentObject(manager)
+        let suffix = group.map { $0.name.isEmpty ? "" : " (\($0.name))" } ?? ""
+        let window = createWindow(title: "Suno – Explore\(suffix)", content: view, width: 1100, height: 800)
+        window.identifier = Self.sunoExploreWindowIdentifier
+        window.contentMinSize = NSSize(width: 480, height: 360)
+        window.setFrameAutosaveName("ChoragusSunoExploreWindow")
+        sunoExploreWindow = window
+        sonosDebugLog("[SUNO] window created visible=\(window.isVisible) frame=\(window.frame)")
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            if self?.sunoExploreWindow === window {
+                self?.sunoExploreWindow = nil
+            }
+            window?.contentViewController = nil
+        }
     }
 
     private func createWindow<Content: View>(title: String,

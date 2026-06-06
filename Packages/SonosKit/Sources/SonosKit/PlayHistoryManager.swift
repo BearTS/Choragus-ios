@@ -27,6 +27,11 @@ public final class PlayHistoryManager: ObservableObject {
     /// use `entries` or the public manager methods.
     public let repo: PlayHistoryRepository
     private var lastLoggedTrack: [String: String] = [:]
+    /// Per-group settle guard for recording — see `trackMetadataChanged`.
+    private var pendingRecordTasks: [String: Task<Void, Never>] = [:]
+    private var pendingRecordKey: [String: String] = [:]
+    private var pendingRecordMetadata: [String: TrackMetadata] = [:]
+    private static let recordSettleWindow: UInt64 = 1_500_000_000  // 1.5s
     private var reloadTask: Task<Void, Never>?
     private var rollupTimer: Timer?
     @Published public var lastRollupDate: Date?
@@ -131,6 +136,10 @@ public final class PlayHistoryManager: ObservableObject {
     public func trackMetadataChanged(groupID: String, metadata: TrackMetadata,
                                      groupName: String, transportState: TransportState) {
         guard isEnabled else { return }
+        // Only schedule while playing, but DON'T cancel an existing pending on a
+        // transient non-playing blip between tracks — that was dropping real
+        // songs. A pending record represents a track that was playing; let it
+        // commit on its own timer.
         guard transportState == .playing else { return }
         // Skip TV/Line-In if user opted out
         if UserDefaults.standard.bool(forKey: UDKey.ignoreTV) {
@@ -145,6 +154,37 @@ public final class PlayHistoryManager: ObservableObject {
         // Don't log radio ad breaks (no real track info)
         guard !metadata.isAdBreak else { return }
 
+        // Settle guard. A track transition can briefly report a NEW trackURI
+        // with the PRIOR track's title (or vice versa) — most visibly Apple
+        // Music HLS-static (issue #47), but the recording path is generic so any
+        // source can do it. Logging that frame stores an entry whose title and
+        // URI are from different tracks, so replaying it plays the wrong song.
+        // Commit to history only after `(title, artist, trackURI)` has held
+        // stable for the settle window; a different frame arriving first cancels
+        // and reschedules, so transient leak frames never commit.
+        // Key on title + trackURI only (NOT artist/art/genre, which fill in over
+        // several frames and would otherwise keep resetting the timer and drop
+        // the song). When the same track is still settling, just refresh the
+        // captured metadata so late-arriving artist/art are included at commit.
+        let stableKey = "\(metadata.title)|\(metadata.trackURI ?? "")"
+        if pendingRecordKey[groupID] == stableKey {
+            pendingRecordMetadata[groupID] = metadata
+            return
+        }
+        pendingRecordKey[groupID] = stableKey
+        pendingRecordMetadata[groupID] = metadata
+        pendingRecordTasks[groupID]?.cancel()
+        pendingRecordTasks[groupID] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.recordSettleWindow)
+            guard !Task.isCancelled, let self else { return }
+            guard let m = self.pendingRecordMetadata[groupID] else { return }
+            self.commitPlay(groupID: groupID, metadata: m, groupName: groupName)
+        }
+    }
+
+    /// Commits a settled track to history (dedup + insert). Called by
+    /// `trackMetadataChanged` after the settle window — never directly.
+    private func commitPlay(groupID: String, metadata: TrackMetadata, groupName: String) {
         // Normalize whitespace for dedup (radio streams often vary trailing spaces)
         let normTitle = metadata.title.trimmingCharacters(in: .whitespaces)
         let normArtist = metadata.artist.trimmingCharacters(in: .whitespaces)
@@ -516,6 +556,21 @@ public final class PlayHistoryManager: ObservableObject {
         Array(Set(entries.compactMap { $0.groupName.isEmpty ? nil : $0.groupName })).sorted()
     }
 
+    /// Room-filter options: every distinct group name PLUS every individual
+    /// room token (group names split on " + "). Lets the user filter by a
+    /// single room ("Office") or a specific grouping ("Office + Float"), with
+    /// the view choosing Includes vs Exact matching.
+    public var roomFilterOptions: [String] {
+        var set = Set<String>()
+        for e in entries where !e.groupName.isEmpty {
+            set.insert(e.groupName)
+            for token in e.groupName.components(separatedBy: " + ") where !token.isEmpty {
+                set.insert(token)
+            }
+        }
+        return set.sorted()
+    }
+
     /// Returns the most recent unique tracks/stations, deduplicated.
     ///
     /// Previously this filtered out radio-URI entries that lacked a
@@ -548,21 +603,7 @@ public final class PlayHistoryManager: ObservableObject {
     /// Returns the streaming service (e.g. "Sonos Radio", "TuneIn", "Spotify"),
     /// not the station name — station name is shown separately in metadata.
     public func sourceServiceName(for entry: PlayHistoryEntry) -> String {
-        guard let uri = entry.sourceURI else { return ServiceName.local }
-        let decoded = (uri.removingPercentEncoding ?? uri).replacingOccurrences(of: "&amp;", with: "&")
-
-        // Check sid= first — identifies the specific service (Sonos Radio, TuneIn, Calm Radio, etc.)
-        if let range = decoded.range(of: "sid=") {
-            let numStr = String(decoded[range.upperBound...].prefix(while: { $0.isNumber }))
-            if let sid = Int(numStr), let name = ServiceID.knownNames[sid] { return name }
-        }
-
-        if URIPrefix.isLocal(uri) { return ServiceName.musicLibrary }
-        if URIPrefix.isRadio(uri) { return ServiceName.radio }
-        if decoded.contains("spotify") { return ServiceName.spotify }
-        if decoded.contains("apple") { return ServiceName.appleMusic }
-        if decoded.contains("amazon") || decoded.contains("amzn") { return ServiceName.amazonMusic }
-        return ServiceName.streaming
+        ServiceName.resolve(uri: entry.sourceURI)
     }
 
     /// Plays per day for the last N days (fills in zeros for days with no plays)

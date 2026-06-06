@@ -31,6 +31,17 @@ public enum BrowsePlaybackStrategy: String, Equatable, Sendable {
     /// direct URL, then play via `x-rincon-mp3radio://` (MP3) or
     /// `x-sonosapi-hls:` (HLS) with a minimal generic-broadcast DIDL.
     case tuneInResolveViaRadioTime
+
+    /// Direct finite HTTPS media file that isn't a Sonos service — e.g. a
+    /// public Suno CDN MP3 (`https://cdn1.suno.ai/<uuid>.mp3`). The raw
+    /// `https://` URL can't play via `SetAVTransportURI` (UPnP 714) or
+    /// `x-rincon-mp3radio:` (strips TLS / 714); the only working route is
+    /// queue-based — `AddURIToQueue` with an `http-get:*:audio/mpeg:*` track
+    /// DIDL, then `SetAVTransportURI` to the queue. Same mechanism as
+    /// `.tuneInResolveViaRadioTime` minus the RadioTime resolve step: here the
+    /// `resourceURI` is already a direct CDN URL and `resourceMetadata`
+    /// already carries the DIDL.
+    case directHTTPSQueue
 }
 
 public struct BrowseItem: Identifiable, Equatable {

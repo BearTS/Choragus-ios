@@ -230,11 +230,25 @@ public final class SMAPIAuthManager: ObservableObject {
         authError = nil
 
         do {
-            let link = try await client.getAppLink(
-                serviceURI: service.secureUri,
-                householdID: householdID,
-                deviceID: deviceID
-            )
+            // Dispatch on the service's declared auth policy. AppLink and
+            // DeviceLink are distinct SMAPI methods: calling getAppLink on a
+            // DeviceLink service (e.g. TIDAL) faults `Client.ItemNotFound`
+            // and yields an empty regUrl. Both return the same regUrl +
+            // linkCode shape, so polling downstream is identical.
+            let link: SMAPIClient.AppLinkResult
+            if service.authType == "DeviceLink" {
+                link = try await client.getDeviceLinkCode(
+                    serviceURI: service.secureUri,
+                    householdID: householdID,
+                    deviceID: deviceID
+                )
+            } else {
+                link = try await client.getAppLink(
+                    serviceURI: service.secureUri,
+                    householdID: householdID,
+                    deviceID: deviceID
+                )
+            }
 
             if link.regUrl.isEmpty {
                 authError = "\(service.name) did not return an authorization URL. This service may not support third-party authentication."

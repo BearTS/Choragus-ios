@@ -34,6 +34,9 @@ final class ArtResolver {
     var radioStationArtURL: URL?
     var webArtURL: URL?
     var forceWebArt = false
+    /// Caches whether a `/getaa?` URL returned a real image, keyed by URL, so a
+    /// local-no-art track isn't re-probed on every metadata poll.
+    @ObservationIgnored private var getaaProbeCache: [String: Bool] = [:]
 
     /// Radio track-art held over from the previous song so the display
     /// doesn't snap to the station logo during the brief window between
@@ -158,6 +161,14 @@ final class ArtResolver {
         // hits across calls and visibly flip the cover.
         if isArtResolved(for: metadata) { return }
 
+        // Apple Music URIs are handled at the metadata layer:
+        // `SonosManager.enrichAppleMusicArtistIfNeeded` does a single
+        // `iTunes lookup?id=<catalogID>` per track and writes the
+        // authoritative title / artist / album / art URL back into
+        // `groupTrackMetadata`, which the resolver then picks up via
+        // its normal `albumArtURI` path. No resolver-layer fast path
+        // needed here.
+
         let hasArt = metadata.albumArtURI != nil && !(metadata.albumArtURI?.isEmpty ?? true)
         let isLocalFile = metadata.trackURI.map(URIPrefix.isLocal) ?? false
         let hasLocalOnlyArt = hasArt && (metadata.albumArtURI?.contains("/getaa?") ?? false)
@@ -173,19 +184,57 @@ final class ArtResolver {
             }
             return
         }
-        // Speaker's /getaa? is more reliable than iTunes title match
-        // (avoids "This Christmas" hitting a Toni Braxton album for a
-        // Joe track). Only fall through to iTunes with no art at all.
+        // Local-file /getaa? proxy: keep it ONLY if it actually returns an
+        // image. Sonos serves an empty (0-byte) body when the file has no
+        // embedded art — in that case fall through to a web lookup (principle:
+        // local media with no art → lookup). This preserves the prior choice of
+        // trusting real getaa art over a fuzzy iTunes title match, while no
+        // longer leaving genuinely-artless local tracks blank.
         if hasLocalOnlyArt {
-            clearWebArt()
-            if !onRadio,
-               let artStr = metadata.albumArtURI, let url = URL(string: artStr) {
-                markArtResolved(for: metadata, url: url)
+            guard let artStr = metadata.albumArtURI, let url = URL(string: artStr) else { return }
+            let applyProbe: (Bool) -> Void = { [weak self] hasImage in
+                guard let self else { return }
+                if hasImage {
+                    self.clearWebArt()
+                    if !onRadio { self.markArtResolved(for: metadata, url: url) }
+                } else {
+                    self.performWebArtSearch(metadata, group: group, dependencies: dependencies,
+                                             isLocalFile: isLocalFile, hasGetaaFallback: true)
+                }
+            }
+            if let cached = getaaProbeCache[artStr] {
+                applyProbe(cached)
+                return
+            }
+            Task { [weak self] in
+                let hasImage = await Self.getaaReturnsImage(url)
+                guard let self else { return }
+                // Bound the probe cache — it keys on art URL and would otherwise
+                // grow for the whole session. A flush only re-probes a few URLs.
+                if self.getaaProbeCache.count >= 1000 {
+                    self.getaaProbeCache.removeAll(keepingCapacity: true)
+                }
+                self.getaaProbeCache[artStr] = hasImage
+                if !hasImage { sonosDebugLog("[ART] getaa empty for \(metadata.title) — web lookup") }
+                applyProbe(hasImage)
             }
             return
         }
-        clearWebArt()
+        performWebArtSearch(metadata, group: group, dependencies: dependencies,
+                            isLocalFile: isLocalFile, hasGetaaFallback: false)
+    }
 
+    /// Runs the web (iTunes) art lookup for a track with no usable supplied art,
+    /// writing the result through every surface so they stay consistent:
+    /// `webArtURL` (Now Playing + Club Vis hero via `artURLForDisplay`), the
+    /// play-history entry (`updateArtwork`), and the URI art cache
+    /// (`cacheArtURL` — Karaoke and the Club Vis wall both read it).
+    /// `hasGetaaFallback` true means an empty getaa is still displayed, so a
+    /// no-result search shouldn't clear it.
+    private func performWebArtSearch(_ metadata: TrackMetadata, group: SonosGroup,
+                                     dependencies: Dependencies,
+                                     isLocalFile: Bool, hasGetaaFallback: Bool) {
+        clearWebArt()
         let searchTerm: String
         if isLocalFile && !metadata.album.isEmpty {
             searchTerm = metadata.album
@@ -229,10 +278,29 @@ final class ArtResolver {
                 self.setWebArtResult(url)
                 self.markArtResolved(for: metadata, url: url)
                 self.updateDisplayedArt(trackMetadata: metadata, group: group)
-            } else if !hasLocalOnlyArt {
+            } else if !hasGetaaFallback {
                 self.setWebArtResult(nil)
             }
         }
+    }
+
+    /// Tight-timeout session for probing whether a `/getaa?` art URL returns a
+    /// real image (vs Sonos's empty body for a local file with no embedded art).
+    private static let artProbeSession: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.timeoutIntervalForRequest = 4
+        c.waitsForConnectivity = false
+        return URLSession(configuration: c)
+    }()
+
+    /// True only when the URL returns a decodable image. Sonos serves an empty
+    /// body for a local file with no embedded art (decodes to nil) — the signal
+    /// to fall back to a web lookup. `nonisolated` so it runs off the main actor.
+    nonisolated static func getaaReturnsImage(_ url: URL) async -> Bool {
+        guard let (data, resp) = try? await artProbeSession.data(from: url),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
+              !data.isEmpty else { return false }
+        return NSImage(data: data) != nil
     }
 
     /// Resolves the song cover for radio (where `albumArtURI` is the

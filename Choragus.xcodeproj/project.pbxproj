@@ -33,6 +33,7 @@
 		A10027 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027 /* WindowManager.swift */; };
 		A10028 /* HoverTooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10028 /* HoverTooltip.swift */; };
 		A10029 /* RecentlyPlayedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10029 /* RecentlyPlayedView.swift */; };
+		A10095 /* HistoryPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10095 /* HistoryPlayback.swift */; };
 		A10030 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030 /* MenuBarController.swift */; };
 		A10031 /* MusicServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10031 /* MusicServicesView.swift */; };
 		A10032 /* NowPlayingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10032 /* NowPlayingViewModel.swift */; };
@@ -52,6 +53,8 @@
 		A10044 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10044 /* UpdateChecker.swift */; };
 		A10045 /* FirstRunWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10045 /* FirstRunWelcomeView.swift */; };
 		A10046 /* ScrollWheelCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10046 /* ScrollWheelCapture.swift */; };
+		A10090 /* SunoExploreWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090 /* SunoExploreWindow.swift */; };
+		A10091 /* SunoWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10091 /* SunoWebView.swift */; };
 		A10047 /* SettingsScrobblingTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10047 /* SettingsScrobblingTab.swift */; };
 		A10060 /* PlexDirectBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060 /* PlexDirectBrowseView.swift */; };
 		A10061 /* LineInBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10061 /* LineInBrowseView.swift */; };
@@ -101,6 +104,7 @@
 		B10027 /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
 		B10028 /* HoverTooltip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverTooltip.swift; sourceTree = "<group>"; };
 		B10029 /* RecentlyPlayedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentlyPlayedView.swift; sourceTree = "<group>"; };
+		B10095 /* HistoryPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPlayback.swift; sourceTree = "<group>"; };
 		B10030 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		B10031 /* MusicServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicServicesView.swift; sourceTree = "<group>"; };
 		B10032 /* NowPlayingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingViewModel.swift; sourceTree = "<group>"; };
@@ -120,6 +124,8 @@
 		B10044 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		B10045 /* FirstRunWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWelcomeView.swift; sourceTree = "<group>"; };
 		B10046 /* ScrollWheelCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollWheelCapture.swift; sourceTree = "<group>"; };
+		B10090 /* SunoExploreWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunoExploreWindow.swift; sourceTree = "<group>"; };
+		B10091 /* SunoWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunoWebView.swift; sourceTree = "<group>"; };
 		B10047 /* SettingsScrobblingTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScrobblingTab.swift; sourceTree = "<group>"; };
 		B10060 /* PlexDirectBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexDirectBrowseView.swift; sourceTree = "<group>"; };
 		B10061 /* LineInBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineInBrowseView.swift; sourceTree = "<group>"; };
@@ -204,6 +210,7 @@
 				B10027 /* WindowManager.swift */,
 				B10028 /* HoverTooltip.swift */,
 				B10029 /* RecentlyPlayedView.swift */,
+				B10095 /* HistoryPlayback.swift */,
 				B10030 /* MenuBarController.swift */,
 				B10031 /* MusicServicesView.swift */,
 				B10060 /* PlexDirectBrowseView.swift */,
@@ -222,6 +229,8 @@
 				B10044 /* UpdateChecker.swift */,
 				B10045 /* FirstRunWelcomeView.swift */,
 				B10046 /* ScrollWheelCapture.swift */,
+				B10090 /* SunoExploreWindow.swift */,
+				B10091 /* SunoWebView.swift */,
 				B10047 /* SettingsScrobblingTab.swift */,
 			);
 			path = Views;
@@ -372,6 +381,7 @@
 				A10027 /* WindowManager.swift in Sources */,
 				A10028 /* HoverTooltip.swift in Sources */,
 				A10029 /* RecentlyPlayedView.swift in Sources */,
+				A10095 /* HistoryPlayback.swift in Sources */,
 				A10030 /* MenuBarController.swift in Sources */,
 				A10031 /* MusicServicesView.swift in Sources */,
 				A10060 /* PlexDirectBrowseView.swift in Sources */,
@@ -400,6 +410,8 @@
 				A10044 /* UpdateChecker.swift in Sources */,
 				A10045 /* FirstRunWelcomeView.swift in Sources */,
 				A10046 /* ScrollWheelCapture.swift in Sources */,
+				A10090 /* SunoExploreWindow.swift in Sources */,
+				A10091 /* SunoWebView.swift in Sources */,
 				A10047 /* SettingsScrobblingTab.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -465,7 +477,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -476,7 +488,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.10;
+				MARKETING_VERSION = 4.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -491,7 +503,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Choragus/Choragus.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Choragus/Info.plist;
@@ -502,7 +514,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 4.10;
+				MARKETING_VERSION = 4.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -278,12 +278,23 @@ final class QueueViewModel: ObservableObject {
     func saveAsPlaylist(name: String) async {
         do {
             _ = try await sonosManager.saveQueueAsPlaylist(group: group, title: name)
-            saveMessage = "Saved as \"\(name)\""
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.saveMessage = nil
-            }
+            showSaveMessage("Saved as \"\(name)\"")
         } catch {
             ErrorHandler.shared.handle(error, context: "QUEUE", userFacing: true)
+        }
+    }
+
+    /// Single owner of the transient save-status capsule. The generation token
+    /// ensures an older auto-clear timer never wipes a newer message — the bug
+    /// when the Sonos and Apple Music save paths each ran their own timer.
+    private var saveMessageGeneration = 0
+    func showSaveMessage(_ message: String) {
+        saveMessage = message
+        saveMessageGeneration += 1
+        let gen = saveMessageGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self, self.saveMessageGeneration == gen else { return }
+            self.saveMessage = nil
         }
     }
 

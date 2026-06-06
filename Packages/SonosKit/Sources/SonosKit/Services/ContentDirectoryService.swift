@@ -13,15 +13,20 @@ public struct QueueItem: Identifiable, Equatable {
     public var album: String
     public var albumArtURI: String?
     public var duration: String
+    /// The track's resource URI (`<res>`), used to recover a real title from
+    /// the play-time cache when the speaker returns a filename (e.g. Suno's
+    /// `<uuid>.mp3`) instead of the song name.
+    public var uri: String?
 
     public init(id: Int, title: String = "", artist: String = "", album: String = "",
-                albumArtURI: String? = nil, duration: String = "") {
+                albumArtURI: String? = nil, duration: String = "", uri: String? = nil) {
         self.id = id
         self.title = title
         self.artist = artist
         self.album = album
         self.albumArtURI = albumArtURI
         self.duration = duration
+        self.uri = uri
     }
 }
 
@@ -82,6 +87,33 @@ public final class ContentDirectoryService {
             action: "RemoveAllTracksFromQueue",
             arguments: [("InstanceID", "0")]
         )
+    }
+
+    /// Triggers a music-library reindex on the device's household. The call is
+    /// household-wide: any one coordinator reindexes every configured share, so
+    /// callers fire it once per household. `AlbumArtistDisplayOption` is sent
+    /// empty to leave the speaker's current album-artist grouping unchanged.
+    public func refreshShareIndex(device: SonosDevice) async throws {
+        _ = try await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: "ContentDirectory",
+            action: "RefreshShareIndex",
+            arguments: [("AlbumArtistDisplayOption", "")]
+        )
+    }
+
+    /// Whether a library reindex is currently running on the device's
+    /// household. Returns false on any error (treat unknown as not-indexing).
+    public func isShareIndexInProgress(device: SonosDevice) async -> Bool {
+        guard let result = try? await soap.send(
+            to: device.baseURL,
+            path: Self.path,
+            service: "ContentDirectory",
+            action: "GetShareIndexInProgress",
+            arguments: []
+        ) else { return false }
+        return result["IsIndexing"] == "1"
     }
 
     public func reorderTracksInQueue(device: SonosDevice, startIndex: Int, numberOfTracks: Int, insertBefore: Int) async throws {
@@ -452,7 +484,8 @@ private class QueueXMLParser: NSObject, XMLParserDelegate {
                     artist: currentArtist,
                     album: currentAlbum,
                     albumArtURI: artURI.isEmpty ? nil : artURI,
-                    duration: currentDuration
+                    duration: currentDuration,
+                    uri: currentResURI.isEmpty ? nil : currentResURI
                 ))
                 inItem = false
             default: break

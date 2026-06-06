@@ -166,12 +166,27 @@ struct NowPlayingView: View {
         .tint(sonosManager.resolvedAccentColor)
         // AVTransport `LastChange` events deliberately exclude
         // `RelativeTimePosition`, so seek-bar position needs a poll.
+        .onChange(of: trackMetadata.trackURI) {
+            // Fixed-output isn't static (e.g. line-in source vs own track) —
+            // re-check when the source changes so "Fixed Volume" appears/clears.
+            Task { await sonosManager.ensureFixedOutputChecked(for: group) }
+        }
         .task(id: group.id) {
+            await sonosManager.ensureFixedOutputChecked(for: group)
             await fetchCurrentState()
+            // A speaker sitting at 100% is a Fixed-output tell — re-verify now
+            // that the volume state has loaded, so "Fixed Volume" shows on open.
+            if vm.volume >= 100 {
+                await sonosManager.ensureFixedOutputChecked(for: group)
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Timing.activePositionPolling))
                 guard !Task.isCancelled else { return }
                 await vm.pollActivePosition()
+                // Re-poll fixed-output so a Fixed↔Variable change made in the
+                // Sonos app while this view is open is reflected live (only
+                // touches line-out models; others no-op).
+                await sonosManager.ensureFixedOutputChecked(for: group)
             }
         }
         .onChange(of: group.id) {
@@ -374,7 +389,7 @@ struct NowPlayingView: View {
                             // Service tag + audio format badge
                             HStack(spacing: 8) {
                                 if let serviceName = currentServiceName {
-                                    Label(serviceName, systemImage: "music.note.tv")
+                                    Label(serviceName, systemImage: ServiceName.icon(for: serviceName))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -746,6 +761,20 @@ struct NowPlayingView: View {
                     }
                     .frame(maxWidth: 300)
                     .alignmentGuide(.sliderCenter) { d in d[HorizontalAlignment.center] }
+                    // Fixed line-out (Connect/Port/Amp): the whole group's
+                    // volume can't be changed — disable the master so it doesn't
+                    // look adjustable while SetVolume is silently skipped (#50).
+                    .disabled(groupVolumeFixed)
+                    .help(groupVolumeFixed ? L10n.fixedLineOutVolume : "")
+                    .overlay {
+                        if groupVolumeFixed {
+                            Text(L10n.fixedVolume)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+                                .background(.regularMaterial, in: Capsule())
+                        }
+                    }
                     // Explicit tint — the outer ScrollView tint can fall through
                     // to the system accent when resolvedAccentColor is nil, which
                     // loses the user's customization on the main volume slider.
@@ -813,6 +842,7 @@ struct NowPlayingView: View {
                                           }
                                       ),
                                       accentColor: sonosManager.resolvedAccentColor ?? .accentColor,
+                                      fixedDeviceIDs: sonosManager.fixedOutputDeviceIDs,
                                       onSetVolume: { device, vol in await vm.setSpeakerVolume(device: device, volume: vol) },
                                       onToggleMute: { device, muted in await vm.setSpeakerMute(device: device, muted: muted) })
                     // `vm.isDraggingVolume` gates the master's drag-
@@ -960,6 +990,13 @@ struct NowPlayingView: View {
     // MARK: - Helpers (delegated to ViewModel)
 
     private var volumeIcon: String { vm.volumeIcon }
+
+    /// True when every member of the group has a fixed line-out, so the group
+    /// (master) volume can't be changed at all (#50).
+    private var groupVolumeFixed: Bool {
+        !group.members.isEmpty &&
+            group.members.allSatisfy { sonosManager.fixedOutputDeviceIDs.contains($0.id) }
+    }
     private var repeatIcon: String { vm.repeatIcon }
     /// Localised label for the HDMI / line-in audio format pill. Returns
     /// nil when the track isn't an HDMI / line-in source or the speaker

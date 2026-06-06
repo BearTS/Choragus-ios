@@ -1,6 +1,48 @@
 
 # Changelog
 
+## v4.11 — 2026-06-06 — TIDAL, Suno, SomaFM, save-queue-to-playlist, metadata fixes
+
+A feature release. Three new services connect (TIDAL, Suno, SomaFM), the queue can be saved to a Sonos or Apple Music playlist, history gains play actions, and a batch of playback / metadata correctness fixes land. Build 30.
+
+### New services
+
+TIDAL (issue #52) is a first-class connectable service — browse, search, direct play, and add-to-queue, with artwork. TIDAL authenticates by DeviceLink (`getDeviceLinkCode` → `getDeviceAuthToken`), not the AppLink flow other services use; `getDeviceAuthToken` is sent with `linkDeviceId` omitted (TIDAL faults `NOT_LINKED_FAILURE` when it is present and not service-minted). A TIDAL track plays via a `getMediaURI`-resolved `audio.tidal.com` CDN URL with empty DIDL, so browse-time art / title / artist are persisted in `TidalCatalog` keyed by the resolved URL and recovered on every playback surface.
+
+- SomaFM (issue #49) connects through the anonymous SMAPI path (no token) and plays via the `x-sonosapi-stream:` broadcast form.
+- Suno (`suno.ai`) gains a Music Services toggle and an in-app browser (`SunoExploreWindow` + `SunoWebView`) over Suno's own public site. Public songs and playlists play to the live-selected group via the direct-HTTPS queue path; `SunoResolver` resolves a clip UUID to its public CDN audio through Suno's clip API. Resolution prefers the card's `/song/` anchor over its cover image (the cover can be a different, non-public clip version). Genre, artist, and lyrics are surfaced where available.
+
+### Save queue to playlist
+
+A single "Save to Playlist…" action opens a sheet with a destination picker. Sonos is always available; Apple Music appears only when every queue item is an Apple Music catalog track (`sid=204`). The sheet shows the queue's source systems so an absent destination is self-explanatory. Apple Music playlists are created through MusicKit (`POST /v1/me/library/playlists`). Each queue row now shows its source system on a third line, resolved by a single shared `ServiceName.resolve(uri:)` classifier used by the queue, the save sheet, and play history.
+
+### History
+
+Right-click a history entry for Play / Play Next / Add to Queue (`HistoryPlayback`, replay DIDL built per source type). Room filtering is token-based with an Exact / Includes toggle, so "Office" can mean only "Office" or anything containing "Office".
+
+### Playback and metadata fixes
+
+- **Wrong artist / album (issue #47).** Sonos firmware can leak the prior track's title / artist onto the next HLS-static Apple Music track even when the URI's catalog ID is correct. The catalog ID is treated as authoritative: an iTunes lookup keyed on it overrides title / artist and replaces `/getaa?`-proxy art.
+- **Wrong track on replay.** A generic record settle-guard debounces history commits (keyed on `title|trackURI`, 1.5 s window) so a transient metadata frame from the previous track is not recorded as the played song. Applies to every source, not just Apple Music.
+- **Spotify add-to-queue rejected.** `resolveSMAPIPlayback` now only adopts a resolved URI when it is a direct `http(s)` stream; Spotify's `getMediaURI` returns another service URI (`x-spotify://…`) that the speaker rejects on AddURIToQueue (UPnP 804). The native `x-sonos-spotify:…?sid=12` + DIDL form is kept instead. TIDAL's CDN resolution is unaffected.
+- **Fixed-volume speakers (issue #50).** Output-fixed detection is keyed on a normalized bare device ID (the `_MR` MediaRenderer suffix in RenderingControl events no longer mismatches the bare topology UUID), `GetOutputFixed` is gated to line-out-capable models, and switching a speaker between fixed and variable / passthrough updates live. A grouped master shows a "Fixed Volume" badge and disables the slider only when every member is fixed. An active line-in names its source speaker on the now-playing card and shows a plug badge in the speaker list.
+- **Missing / reconnecting speakers (issues #41, #46).** UPnP subscriptions rebind on a real network-path change (`NWPathMonitor`, debounced); dead devices are probed before subscribe so they don't burn the SUBSCRIBE timeout, and they stay visible in the sidebar rather than disappearing. Play paths set transport state to `.playing` immediately after a successful `play()` so a stale subscribe callback can't strand the UI on "transitioning".
+- **Clearer errors.** A persistent UPnP 701 on a single-track direct play surfaces as a missing-service message (`StaleDataError.serviceUnavailable`) instead of a speaker-layout error, since the usual cause is the track's service not being set up on that speaker's system.
+- Transport liveness probing requires two consecutive misses before dropping a device, removing a multi-second sidebar display lag on a transient network glitch.
+
+### Local library
+
+Settings → Music Services gains a library-index refresh (issue #51). It re-scans NAS / shared-folder music and runs on every connected system; S1 and S2 are each handled, and a system without a local library is skipped without error.
+
+### Artwork and UI
+
+- Square cover art scales to fit; non-square art fills and is centre-cropped, applied consistently across now playing, the visualisation wall and hero, karaoke, and the history cache. The karaoke backdrop always fills the 16:9 window rather than a square crop.
+- The queue panel is manually resizable, and a long track title shows the full text in a near-instant hover popover.
+
+### Localization
+
+Settings and the Apple Music browser are fully localized across all supported languages; sort controls display localized names while keeping stable raw values for persistence.
+
 ## v4.10 — 2026-05-22 — Efficiency and polish
 
 Idle-CPU drop, event-driven group state, and a sweep of UI fixes. No new features.

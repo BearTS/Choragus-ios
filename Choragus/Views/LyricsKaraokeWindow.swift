@@ -186,7 +186,7 @@ struct LyricsKaraokeWindow: View {
         // crossfade runs at the layer level.
         ZStack {
             if let url = albumArtURL {
-                CachedAsyncImage(url: url, cornerRadius: 0, priority: .background)
+                CachedAsyncImage(url: url, cornerRadius: 0, priority: .background, fillFrame: true)
                     .blur(radius: 60)
                     .opacity(0.30)
                     .scaleEffect(1.1)

@@ -9,6 +9,8 @@ struct MusicServicesSettingsSection: View {
     @EnvironmentObject var plexAuth: PlexAuthManager
     @AppStorage(UDKey.tuneInSearchEnabled) private var tuneInEnabled = false
     @AppStorage(UDKey.calmRadioEnabled) private var calmRadioEnabled = false
+    @AppStorage(UDKey.somaFMEnabled) private var somaFMEnabled = false
+    @AppStorage(UDKey.sunoEnabled) private var sunoEnabled = false
     @AppStorage(UDKey.appleMusicSearchEnabled) private var appleMusicEnabled = false
     @AppStorage(UDKey.sonosRadioEnabled) private var sonosRadioEnabled = false
     @State private var searchText = ""
@@ -16,6 +18,8 @@ struct MusicServicesSettingsSection: View {
     @State private var isLoadingDescriptors = false
     @State private var showPlexPinSheet = false
     @State private var plexPinStartError: String?
+    @State private var libraryUpdating = false
+    @State private var libraryStatus: String?
     @AppStorage("musicServices.unlinkedExpanded") private var unlinkedExpanded = false
 
     // Services confirmed working with AppLink auth. Plex (sid=212) was
@@ -57,6 +61,8 @@ struct MusicServicesSettingsSection: View {
         ServiceID.tuneIn,
         ServiceID.tuneInNew,
         ServiceID.calmRadio,
+        ServiceID.somaFM,
+        ServiceID.sunoPseudo,
         ServiceID.appleMusic,
         ServiceID.sonosRadio,
     ]
@@ -88,6 +94,8 @@ struct MusicServicesSettingsSection: View {
         .init(key: "204",       serviceID: ServiceID.appleMusic, name: "Apple Music",  alternativeIDs: [], plexFlavor: .none),
         .init(key: "254",       serviceID: ServiceID.tuneIn,     name: "TuneIn",       alternativeIDs: [ServiceID.tuneInNew], plexFlavor: .none),
         .init(key: "144",       serviceID: ServiceID.calmRadio,  name: "Calm Radio",   alternativeIDs: [], plexFlavor: .none),
+        .init(key: "516",       serviceID: ServiceID.somaFM,     name: "SomaFM",       alternativeIDs: [], plexFlavor: .none),
+        .init(key: "suno",      serviceID: ServiceID.sunoPseudo, name: "suno.ai",      alternativeIDs: [], plexFlavor: .none),
         .init(key: "303",       serviceID: ServiceID.sonosRadio, name: "Sonos Radio",  alternativeIDs: [], plexFlavor: .none),
         // Pandora is pinned so it surfaces as `.blocked` (red,
         // Unavailable) for everyone, regardless of household state.
@@ -450,6 +458,50 @@ struct MusicServicesSettingsSection: View {
             }
         }
         .padding(.top, 4)
+
+        // ─── LOCAL MUSIC LIBRARY ───
+        // Reindex NAS / shared-folder music across every system. Hits S1 and
+        // S2 households automatically (one coordinator each); systems without a
+        // library are skipped, so a single-system setup never errors.
+        VStack(alignment: .leading, spacing: 6) {
+            Divider().padding(.vertical, 4)
+            Text(L10n.localMusicLibraryHeader)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Button { updateLibrary() } label: {
+                    Label(L10n.updateLibraryIndex, systemImage: "arrow.clockwise")
+                }
+                .disabled(libraryUpdating)
+                if libraryUpdating { ProgressView().controlSize(.small) }
+                if let libraryStatus {
+                    Text(libraryStatus)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Text(L10n.updateLibraryIndexHint)
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 4)
+    }
+
+    /// Fires a library reindex across all households and reflects the outcome.
+    private func updateLibrary() {
+        libraryUpdating = true
+        libraryStatus = nil
+        Task {
+            let result = await sonosManager.updateMusicLibrary()
+            libraryUpdating = false
+            if result.librariesFound == 0 {
+                libraryStatus = L10n.noLocalLibraryFound
+            } else {
+                libraryStatus = L10n.reindexingSystems(result.triggered)
+            }
+        }
     }
 
     /// Legend shown at the top of the unlinked services section.
@@ -600,6 +652,8 @@ struct MusicServicesSettingsSection: View {
         switch serviceID {
         case ServiceID.tuneIn, ServiceID.tuneInNew: return $tuneInEnabled
         case ServiceID.calmRadio:                    return $calmRadioEnabled
+        case ServiceID.somaFM:                       return $somaFMEnabled
+        case ServiceID.sunoPseudo:                   return $sunoEnabled
         case ServiceID.appleMusic:                   return $appleMusicEnabled
         case ServiceID.sonosRadio:                   return $sonosRadioEnabled
         default:                                      return .constant(false)

@@ -15,8 +15,12 @@ struct QueueView: View {
 
     @StateObject private var vm: QueueViewModel
     @State private var dropTargetIndex: Int?
-    @State private var showSavePlaylist = false
-    @State private var newPlaylistName = ""
+    /// Single "Save to Playlist…" entry point. Opens a sheet that lets the
+    /// user pick a destination system (Sonos always; Apple Music only when
+    /// the whole queue is Apple Music catalog) and name the playlist.
+    @State private var showSaveSheet = false
+    @AppStorage(UDKey.appleMusicKitConnected) private var appleMusicKitConnected = false
+    private let appleMusicProvider = AppleMusicProviderFactory.makeCurrent()
     /// Last `trackURI` we acted on. When the metadata stream pushes a
     /// new URI we schedule an authoritative `loadQueue()` so the
     /// current-track indicator re-syncs from `getPositionInfo` — same
@@ -40,6 +44,69 @@ struct QueueView: View {
     init(group: SonosGroup, sonosManager: SonosManager) {
         self.group = group
         _vm = StateObject(wrappedValue: QueueViewModel(sonosManager: sonosManager, group: group))
+    }
+
+    /// Apple Music catalog song IDs for the queue, in order — but only when
+    /// EVERY item is an Apple Music catalog track (`sid=204`, `song%3a<id>`).
+    /// `nil` if the queue is empty or mixes in any non-Apple-Music source,
+    /// because a library playlist can only hold catalog songs. Each URI is
+    /// `x-sonos-http:song%3a<id>.mp4?sid=204&…` (see AppleMusicPlaybackHelpers).
+    private var appleMusicCatalogIDs: [String]? {
+        guard !vm.queueItems.isEmpty else { return nil }
+        var ids: [String] = []
+        for item in vm.queueItems {
+            guard let uri = item.uri, uri.contains("sid=204"),
+                  let id = URIPrefix.appleMusicSongID(from: uri) else { return nil }
+            ids.append(id)
+        }
+        return ids
+    }
+
+    /// Whether the queue can be saved as an Apple Music library playlist —
+    /// MusicKit built in, Apple Music connected, and every item Apple Music
+    /// catalog.
+    private var canSaveToAppleMusic: Bool {
+        AppleMusicProviderFactory.hasMusicKitSupport
+            && appleMusicKitConnected
+            && (appleMusicCatalogIDs?.isEmpty == false)
+    }
+
+    /// Destinations valid for the current queue. Sonos is always valid (a
+    /// saved Sonos queue accepts any mix of sources). Service-specific
+    /// destinations appear only when every track belongs to that service.
+    private var validDestinations: [SaveQueueDestination] {
+        var out: [SaveQueueDestination] = [.sonos]
+        if canSaveToAppleMusic { out.append(.appleMusic) }
+        return out
+    }
+
+    /// Distinct source systems present in the queue, ordered, for the
+    /// save-sheet summary (explains why a service destination is or isn't
+    /// offered).
+    private var queueSources: [String] {
+        var seen: Set<String> = []
+        var out: [String] = []
+        for item in vm.queueItems {
+            let name = ServiceName.resolve(uri: item.uri)
+            if seen.insert(name).inserted { out.append(name) }
+        }
+        return out
+    }
+
+    /// Dispatches a save-queue request to the chosen destination. Both
+    /// branches report through the same `saveMessage` capsule the queue
+    /// already overlays.
+    @MainActor
+    private func performSave(destination: SaveQueueDestination, name: String) async {
+        switch destination {
+        case .sonos:
+            await vm.saveAsPlaylist(name: name)   // manages its own saveMessage + auto-clear
+        case .appleMusic:
+            let ids = appleMusicCatalogIDs ?? []
+            guard !ids.isEmpty else { return }
+            let ok = await appleMusicProvider.createLibraryPlaylist(name: name, catalogSongIDs: ids)
+            vm.showSaveMessage(ok ? L10n.savedToAppleMusic(ids.count) : L10n.appleMusicSaveFailed)
+        }
     }
 
     var body: some View {
@@ -114,15 +181,13 @@ struct QueueView: View {
                 Task { await vm.loadQueue() }
             }
         }
-        .alert(L10n.saveAsPlaylist, isPresented: $showSavePlaylist) {
-            TextField(L10n.playlistNamePlaceholder, text: $newPlaylistName)
-            Button(L10n.cancel, role: .cancel) { newPlaylistName = "" }
-            Button(L10n.save) {
-                let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
-                guard !name.isEmpty else { return }
-                newPlaylistName = ""
-                Task { await vm.saveAsPlaylist(name: name) }
-            }
+        .sheet(isPresented: $showSaveSheet) {
+            SaveQueueSheet(
+                destinations: validDestinations,
+                sources: queueSources,
+                trackCount: vm.queueItems.count,
+                onSave: { destination, name in await performSave(destination: destination, name: name) }
+            )
         }
         .overlay(alignment: .bottom) {
             if let msg = vm.saveMessage {
@@ -188,11 +253,11 @@ struct QueueView: View {
             .fixedSize()
             .layoutPriority(3)
 
-            Button { showSavePlaylist = true } label: {
+            Button { showSaveSheet = true } label: {
                 Image(systemName: "text.badge.plus").font(.caption)
             }
             .buttonStyle(.plain)
-            .tooltip(L10n.saveAsPlaylist)
+            .tooltip(L10n.saveToPlaylist)
             .disabled(vm.queueItems.isEmpty)
             .fixedSize()
             .layoutPriority(3)
@@ -453,6 +518,22 @@ struct QueueItemRow: View {
     var isPlaying: Bool = false
     var isLoading: Bool = false
 
+    @State private var titleTruncated = false
+    @State private var showTooltip = false
+    @State private var hoverTask: Task<Void, Never>?
+
+    /// Source system for this track, derived from its resource URI.
+    private var source: String { ServiceName.resolve(uri: item.uri) }
+
+    /// Measures whether the title is wider than the space it's given, so the
+    /// hover tooltip only fires for names that actually truncate.
+    private func checkTruncation(available: CGFloat) {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize,
+                                     weight: isCurrentTrack ? .semibold : .regular)
+        let intrinsic = (item.title as NSString).size(withAttributes: [.font: font]).width
+        titleTruncated = intrinsic > available + 1
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
@@ -476,10 +557,50 @@ struct QueueItemRow: View {
                     .font(.body)
                     .fontWeight(isCurrentTrack ? .semibold : .regular)
                     .lineLimit(1)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear
+                                .onAppear { checkTruncation(available: geo.size.width) }
+                                .onChange(of: geo.size.width) { _, w in checkTruncation(available: w) }
+                                .onChange(of: item.title) { _, _ in checkTruncation(available: geo.size.width) }
+                        }
+                    )
                 Text(item.artist)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                // Third line — the source system this track plays from
+                // (Apple Music, Spotify, TuneIn, Music Library, …). Same
+                // classifier the save-queue destination gate and play
+                // history use, so the row and the popup never disagree.
+                HStack(spacing: 4) {
+                    Image(systemName: ServiceName.icon(for: source))
+                        .font(.system(size: 9))
+                    Text(source)
+                        .font(.caption2)
+                }
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+            }
+            // Near-instant custom tooltip — only for titles that truncate when
+            // the queue panel is narrow (the native .help() delay is ~1.5s).
+            .onHover { inside in
+                hoverTask?.cancel()
+                guard inside, titleTruncated else { showTooltip = false; return }
+                hoverTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 120_000_000)
+                    if !Task.isCancelled { showTooltip = true }
+                }
+            }
+            .popover(isPresented: $showTooltip, arrowEdge: .top) {
+                Text(item.artist.isEmpty ? item.title : "\(item.title) — \(item.artist)")
+                    .font(.callout)
+                    .lineLimit(nil)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .frame(width: 320, alignment: .leading)
             }
 
             Spacer()
@@ -492,6 +613,111 @@ struct QueueItemRow: View {
         .padding(.vertical, 4)
         .padding(.horizontal, 12)
         .background(isCurrentTrack ? Color.accentColor.opacity(0.1) : Color.clear)
+    }
+}
+
+// MARK: - Save Queue Sheet
+
+/// A destination system the current queue can be saved to as a playlist.
+enum SaveQueueDestination: String, Identifiable, CaseIterable {
+    case sonos
+    case appleMusic
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .sonos:      return L10n.sonosDestination
+        case .appleMusic: return ServiceName.appleMusic
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .sonos:      return "hifispeaker.2.fill"
+        case .appleMusic: return "music.note"
+        }
+    }
+}
+
+/// Sheet for "Save to Playlist…". The caller passes only the destinations
+/// valid for the queue's contents (Sonos always; a service only when every
+/// track belongs to it) plus the distinct source systems present. The sheet
+/// owns name + selection state and reports the choice back through `onSave`,
+/// then dismisses. Result feedback shows via the queue's own message capsule.
+struct SaveQueueSheet: View {
+    let destinations: [SaveQueueDestination]
+    let sources: [String]
+    let trackCount: Int
+    let onSave: (SaveQueueDestination, String) async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var destination: SaveQueueDestination
+    @State private var name: String = ""
+    @State private var working = false
+
+    init(destinations: [SaveQueueDestination],
+         sources: [String],
+         trackCount: Int,
+         onSave: @escaping (SaveQueueDestination, String) async -> Void) {
+        self.destinations = destinations
+        self.sources = sources
+        self.trackCount = trackCount
+        self.onSave = onSave
+        _destination = State(initialValue: destinations.first ?? .sonos)
+    }
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L10n.saveQueueTitle)
+                .font(.headline)
+
+            // Source summary — what the queue contains, so an absent service
+            // destination (e.g. Apple Music on a mixed queue) is explained.
+            HStack(spacing: 6) {
+                Image(systemName: "music.note.list")
+                    .foregroundStyle(.secondary)
+                Text(L10n.queueSource(sources.joined(separator: ", ")))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Picker(L10n.saveDestination, selection: $destination) {
+                ForEach(destinations) { d in
+                    Label(d.displayName, systemImage: d.icon).tag(d)
+                }
+            }
+            .pickerStyle(.menu)
+
+            TextField(L10n.playlistNamePlaceholder, text: $name)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(save)
+
+            HStack {
+                Spacer()
+                Button(L10n.cancel, role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(L10n.save, action: save)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(trimmedName.isEmpty || working)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .disabled(working)
+    }
+
+    private func save() {
+        let finalName = trimmedName
+        guard !finalName.isEmpty, !working else { return }
+        working = true
+        Task {
+            await onSave(destination, finalName)
+            dismiss()
+        }
     }
 }
 

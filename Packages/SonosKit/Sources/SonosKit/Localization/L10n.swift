@@ -56,6 +56,9 @@ public enum L10n {
     public static var playNow: String { tr("playNow") }
     public static var playNext: String { tr("playNext") }
     public static var addToQueue: String { tr("addToQueue") }
+    public static var playTopSongs: String { tr("playTopSongs") }
+    public static var queueTopSongsNext: String { tr("queueTopSongsNext") }
+    public static var addTopSongsToQueue: String { tr("addTopSongsToQueue") }
     public static var couldNotPlay: String { tr("couldNotPlay") }
     public static var mayRequireSignIn: String { tr("mayRequireSignIn") }
     public static var error_: String { tr("error_") }
@@ -513,11 +516,120 @@ public enum L10n {
     // MARK: - Queue
     public static var shuffleQueueTooltip: String { tr("shuffleQueueTooltip") }
     public static var saveAsPlaylist: String { tr("saveAsPlaylist") }
+    public static var saveToAppleMusic: String { tr("saveToAppleMusic") }
+    public static var saveToPlaylist: String { tr("saveToPlaylist") }
+    public static var saveQueueTitle: String { tr("saveQueueTitle") }
+    public static var saveDestination: String { tr("saveDestination") }
+    public static var sonosDestination: String { tr("sonosDestination") }
+    public static func queueSource(_ sources: String) -> String {
+        String(format: tr("queueSourceFormat"), sources)
+    }
+    public static var appleMusicSaveFailed: String { tr("appleMusicSaveFailed") }
+    public static func savedToAppleMusic(_ count: Int) -> String {
+        String(format: tr("savedToAppleMusicFormat"), count)
+    }
     public static var shufflingEllipsis: String { tr("shufflingEllipsis") }
     public static var addingToQueueEllipsis: String { tr("addingToQueueEllipsis") }
     public static var loadingQueueEllipsis: String { tr("loadingQueueEllipsis") }
     public static var dragTracksHere: String { tr("dragTracksHere") }
     public static var playlistNamePlaceholder: String { tr("playlistNamePlaceholder") }
+
+    // MARK: - Apple Music (MusicKit) connect-row + detail views
+    public static var amConnected: String { tr("amConnected") }
+    public static func amConnectedStorefront(_ s: String) -> String { String(format: tr("amConnectedStorefrontFormat"), s) }
+    public static var amPermissionDenied: String { tr("amPermissionDenied") }
+    public static var amNoActiveSubscription: String { tr("amNoActiveSubscription") }
+    public static var amNotConnected: String { tr("amNotConnected") }
+    public static var amNotAvailableInBuild: String { tr("amNotAvailableInBuild") }
+    public static var amDetailConnected: String { tr("amDetailConnected") }
+    public static var amDetailDenied: String { tr("amDetailDenied") }
+    public static var amDetailNoSubscription: String { tr("amDetailNoSubscription") }
+    public static var amDetailNotConnected: String { tr("amDetailNotConnected") }
+    public static var amActionInProgress: String { tr("amActionInProgress") }
+    public static func amPlaying(_ name: String) -> String { String(format: tr("amPlayingFormat"), name) }
+    public static func amQueueingNext(_ name: String) -> String { String(format: tr("amQueueingNextFormat"), name) }
+    public static func amAddingToQueue(_ name: String) -> String { String(format: tr("amAddingToQueueFormat"), name) }
+    public static func amPlayingTopSongs(_ name: String) -> String { String(format: tr("amPlayingTopSongsFormat"), name) }
+    public static func amQueueingTopSongsNext(_ name: String) -> String { String(format: tr("amQueueingTopSongsNextFormat"), name) }
+    public static func amAddingTopSongsToQueue(_ name: String) -> String { String(format: tr("amAddingTopSongsToQueueFormat"), name) }
+    public static func amPlayingTracks(_ count: Int) -> String { String(format: tr("amPlayingTracksFormat"), count) }
+    public static func amAddingTracksToQueue(_ count: Int) -> String { String(format: tr("amAddingTracksToQueueFormat"), count) }
+    public static func amQueueingTracksNext(_ count: Int) -> String { String(format: tr("amQueueingTracksNextFormat"), count) }
+    public static var amPlayAll: String { tr("amPlayAll") }
+    public static var amAddAllToQueue: String { tr("amAddAllToQueue") }
+    public static var amTopSongs: String { tr("amTopSongs") }
+    public static var amTopAlbums: String { tr("amTopAlbums") }
+    public static var amTopPlaylists: String { tr("amTopPlaylists") }
+    public static var amAlbums: String { tr("amAlbums") }
+    public static var amStations: String { tr("amStations") }
+    public static var amNoTracks: String { tr("amNoTracks") }
+    public static var amNothingToShow: String { tr("amNothingToShow") }
+    public static var amFilterGenres: String { tr("amFilterGenres") }
+    public static var amNoChartsForGenre: String { tr("amNoChartsForGenre") }
+    public static var amSearchHint: String { tr("amSearchHint") }
+    // Plain %d count label; iOS inflect: AttributedString form dropped for cross-platform consistency.
+    public static func amItemsCount(_ n: Int) -> String { String(format: tr("amItemsCountFormat"), n) }
+    public static var amPlaylists: String { tr("amPlaylists") }
+    public static var amPlaylistBadge: String { tr("amPlaylistBadge") }
+    public static var amEmptyPlaylist: String { tr("amEmptyPlaylist") }
+    public static var amSearchStationsPlaceholder: String { tr("amSearchStationsPlaceholder") }
+    public static var amSearchAppleMusicStations: String { tr("amSearchAppleMusicStations") }
+    public static var amNoStationsFound: String { tr("amNoStationsFound") }
+    public static var amSortDefault: String { tr("amSortDefault") }
+    public static var amSortName: String { tr("amSortName") }
+    public static var amSortLiveFirst: String { tr("amSortLiveFirst") }
+    public static var amSortTitle: String { tr("amSortTitle") }
+    public static var amSortArtist: String { tr("amSortArtist") }
+    public static var amSortAlbum: String { tr("amSortAlbum") }
+    public static var amSortDuration: String { tr("amSortDuration") }
+    public static var amSortNewest: String { tr("amSortNewest") }
+    public static var amSortOldest: String { tr("amSortOldest") }
+    public static var amSortRecentlyAdded: String { tr("amSortRecentlyAdded") }
+    public static var amSortFirstAdded: String { tr("amSortFirstAdded") }
+    public static var amSortLabelPlain: String { tr("amSortLabelPlain") }
+    public static func amSortLabel(_ s: String) -> String { String(format: tr("amSortLabelFormat"), s) }
+    // MusicKit browse/search section headers + connect button + search placeholder.
+    public static var amConnectAppleMusic: String { tr("amConnectAppleMusic") }
+    public static var amYourLibrary: String { tr("amYourLibrary") }
+    public static var amRecentlyPlayed: String { tr("amRecentlyPlayed") }
+    public static var amMadeForYou: String { tr("amMadeForYou") }
+    public static var amCharts: String { tr("amCharts") }
+    public static var amBrowse: String { tr("amBrowse") }
+    public static var amSearchAppleMusic: String { tr("amSearchAppleMusic") }
+    public static var amSongs: String { tr("amSongs") }
+    public static var amArtists: String { tr("amArtists") }
+    // MusicKit browse extras + search empty states + auth prompt copy.
+    public static var amGenres: String { tr("amGenres") }
+    public static var amStationsForYou: String { tr("amStationsForYou") }
+    public static var amRadioStations: String { tr("amRadioStations") }
+    public static var amNowInSpatialAudio: String { tr("amNowInSpatialAudio") }
+    public static var amSpatialAudio: String { tr("amSpatialAudio") }
+    public static var amLibrarySongs: String { tr("amLibrarySongs") }
+    public static var amLibraryAlbums: String { tr("amLibraryAlbums") }
+    public static var amLibraryArtists: String { tr("amLibraryArtists") }
+    public static var amLibraryPlaylists: String { tr("amLibraryPlaylists") }
+    public static var amSeeAllSongs: String { tr("amSeeAllSongs") }
+    public static var amSeeAllAlbums: String { tr("amSeeAllAlbums") }
+    public static var amSeeAllArtists: String { tr("amSeeAllArtists") }
+    public static var amSeeAllPlaylists: String { tr("amSeeAllPlaylists") }
+    public static var amSearchPrompt: String { tr("amSearchPrompt") }
+    public static var amSearchCatalogPrompt: String { tr("amSearchCatalogPrompt") }
+    public static var amNoResults: String { tr("amNoResults") }
+    public static var amTryDifferentQuery: String { tr("amTryDifferentQuery") }
+    public static var amNoTracksMatched: String { tr("amNoTracksMatched") }
+    public static var amNoAlbums: String { tr("amNoAlbums") }
+    public static var amNoAlbumsMatched: String { tr("amNoAlbumsMatched") }
+    public static var amNoArtists: String { tr("amNoArtists") }
+    public static var amNoArtistsMatched: String { tr("amNoArtistsMatched") }
+    public static var amNoPlaylists: String { tr("amNoPlaylists") }
+    public static var amNoPlaylistsMatched: String { tr("amNoPlaylistsMatched") }
+    public static var amAccessDeniedTitle: String { tr("amAccessDeniedTitle") }
+    public static var amSubscriptionRequiredTitle: String { tr("amSubscriptionRequiredTitle") }
+    public static var amNotAvailableTitle: String { tr("amNotAvailableTitle") }
+    public static var amPromptBodyNotDetermined: String { tr("amPromptBodyNotDetermined") }
+    public static var amPromptBodyDenied: String { tr("amPromptBodyDenied") }
+    public static var amPromptBodyNoSubscription: String { tr("amPromptBodyNoSubscription") }
+    public static var amPromptBodyNotApplicable: String { tr("amPromptBodyNotApplicable") }
 
     // MARK: - Play history context menu
     public static var copyTrackDetails: String { tr("copyTrackDetails") }
@@ -704,6 +816,10 @@ public enum L10n {
     public static var noStationData: String { tr("noStationData") }
     public static var buildingSummaries: String { tr("buildingSummaries") }
     public static var manualOnly: String { tr("manualOnly") }
+    public static var intervalLabel: String { tr("intervalLabel") }
+    public static func historyStats(entries: Int, hours: Double) -> String {
+        String(format: tr("historyStatsFormat"), entries, hours)
+    }
     public static var never_: String { tr("never") }
     public static func last30DaysAverage(_ avg: Int) -> String {
         String(format: tr("last30DaysAverageFormat"), avg)
@@ -809,6 +925,18 @@ public enum L10n {
     public static var firstTimeHereSetupSteps: String { tr("firstTimeHereSetupSteps") }
     public static var checkingSonosHousehold: String { tr("checkingSonosHousehold") }
     public static var noServicesConnectedYet: String { tr("noServicesConnectedYet") }
+    public static var localMusicLibraryHeader: String { tr("localMusicLibraryHeader") }
+    public static var updateLibraryIndex: String { tr("updateLibraryIndex") }
+    public static var updateLibraryIndexHint: String { tr("updateLibraryIndexHint") }
+    public static var noLocalLibraryFound: String { tr("noLocalLibraryFound") }
+    public static func reindexingSystems(_ count: Int) -> String {
+        String(format: tr("reindexingSystemsFormat"), count)
+    }
+    public static var fixedLineOutVolume: String { tr("fixedLineOutVolume") }
+    public static var fixedShort: String { tr("fixedShort") }
+    public static var fixedVolume: String { tr("fixedVolume") }
+    public static var roomMatchIncludes: String { tr("roomMatchIncludes") }
+    public static var roomMatchExact: String { tr("roomMatchExact") }
     public static var legendAvailable: String { tr("legendAvailable") }
     public static var legendUntested: String { tr("legendUntested") }
     public static var legendUnavailable: String { tr("legendUnavailable") }
@@ -820,6 +948,7 @@ public enum L10n {
     public static var plexRelayReturnedNoItems: String { tr("plexRelayReturnedNoItems") }
     public static var localNetworkAccessRequired: String { tr("localNetworkAccessRequired") }
     public static var openSystemSettings: String { tr("openSystemSettings") }
+    public static var reCheck: String { tr("reCheck") }
     public static var localNetworkAccessMessage: String { tr("localNetworkAccessMessage") }
     public static var playAllNow: String { tr("playAllNow") }
 
@@ -1092,6 +1221,872 @@ public enum L10n {
 
     // swiftlint:disable function_body_length
     private static let translations: [String: [String: String]] = [
+
+        // ========================
+        // MARK: Local Music Library / fixed-volume / room-match / Apple Music save
+        // ========================
+        "localMusicLibraryHeader": [
+            "en": "Local Music Library", "de": "Lokale Musikbibliothek",
+            "fr": "Bibliothèque musicale locale", "nl": "Lokale muziekbibliotheek",
+            "es": "Biblioteca de música local", "it": "Libreria musicale locale",
+            "sv": "Lokalt musikbibliotek", "nb": "Lokalt musikkbibliotek",
+            "da": "Lokalt musikbibliotek", "ja": "ローカル音楽ライブラリ",
+            "pt": "Biblioteca de música local", "pl": "Lokalna biblioteka muzyczna",
+            "zh-Hans": "本地音乐库",
+        ],
+        "updateLibraryIndex": [
+            "en": "Update Library Index", "de": "Bibliotheksindex aktualisieren",
+            "fr": "Mettre à jour l'index de la bibliothèque", "nl": "Bibliotheekindex bijwerken",
+            "es": "Actualizar índice de la biblioteca", "it": "Aggiorna indice libreria",
+            "sv": "Uppdatera biblioteksindex", "nb": "Oppdater bibliotekindeks",
+            "da": "Opdater biblioteksindeks", "ja": "ライブラリインデックスを更新",
+            "pt": "Atualizar índice da biblioteca", "pl": "Zaktualizuj indeks biblioteki",
+            "zh-Hans": "更新资料库索引",
+        ],
+        "updateLibraryIndexHint": [
+            "en": "Re-scans your NAS or shared-folder music after you add or change files. Runs on every connected system; systems without a local library are skipped.",
+            "de": "Durchsucht Ihre NAS- oder Freigabeordner-Musik erneut, nachdem Sie Dateien hinzugefügt oder geändert haben. Läuft auf jedem verbundenen System; Systeme ohne lokale Bibliothek werden übersprungen.",
+            "fr": "Réanalyse la musique de votre NAS ou dossier partagé après l'ajout ou la modification de fichiers. S'exécute sur chaque système connecté ; les systèmes sans bibliothèque locale sont ignorés.",
+            "nl": "Scant uw NAS- of gedeelde-mapmuziek opnieuw nadat u bestanden hebt toegevoegd of gewijzigd. Wordt uitgevoerd op elk verbonden systeem; systemen zonder lokale bibliotheek worden overgeslagen.",
+            "es": "Vuelve a escanear la música de su NAS o carpeta compartida después de añadir o cambiar archivos. Se ejecuta en cada sistema conectado; los sistemas sin biblioteca local se omiten.",
+            "it": "Esegue di nuovo la scansione della musica sul NAS o nella cartella condivisa dopo aver aggiunto o modificato file. Viene eseguita su ogni sistema connesso; i sistemi senza libreria locale vengono ignorati.",
+            "sv": "Skannar om musiken på din NAS eller delade mapp efter att du lagt till eller ändrat filer. Körs på varje anslutet system; system utan lokalt bibliotek hoppas över.",
+            "nb": "Skanner musikken på NAS-en eller den delte mappen på nytt etter at du har lagt til eller endret filer. Kjører på hvert tilkoblet system; systemer uten lokalt bibliotek hoppes over.",
+            "da": "Genscanner musikken på din NAS eller delte mappe, efter du har tilføjet eller ændret filer. Kører på hvert forbundet system; systemer uden lokalt bibliotek springes over.",
+            "ja": "ファイルを追加・変更した後、NASまたは共有フォルダの音楽を再スキャンします。接続されたすべてのシステムで実行され、ローカルライブラリのないシステムはスキップされます。",
+            "pt": "Verifica novamente a música no seu NAS ou pasta compartilhada depois de adicionar ou alterar arquivos. É executado em todos os sistemas conectados; sistemas sem biblioteca local são ignorados.",
+            "pl": "Ponownie skanuje muzykę na serwerze NAS lub w folderze udostępnionym po dodaniu lub zmianie plików. Działa na każdym połączonym systemie; systemy bez lokalnej biblioteki są pomijane.",
+            "zh-Hans": "在您添加或更改文件后，重新扫描 NAS 或共享文件夹中的音乐。在每个已连接的系统上运行；没有本地资料库的系统将被跳过。",
+        ],
+        "noLocalLibraryFound": [
+            "en": "No local music library found", "de": "Keine lokale Musikbibliothek gefunden",
+            "fr": "Aucune bibliothèque musicale locale trouvée", "nl": "Geen lokale muziekbibliotheek gevonden",
+            "es": "No se encontró biblioteca de música local", "it": "Nessuna libreria musicale locale trovata",
+            "sv": "Inget lokalt musikbibliotek hittades", "nb": "Fant ingen lokalt musikkbibliotek",
+            "da": "Intet lokalt musikbibliotek fundet", "ja": "ローカル音楽ライブラリが見つかりません",
+            "pt": "Nenhuma biblioteca de música local encontrada", "pl": "Nie znaleziono lokalnej biblioteki muzycznej",
+            "zh-Hans": "未找到本地音乐库",
+        ],
+        "reindexingSystemsFormat": [
+            "en": "Reindexing %d system(s)\u{2026}", "de": "%d System(e) werden neu indiziert\u{2026}",
+            "fr": "Réindexation de %d système(s)\u{2026}", "nl": "%d systeem/systemen opnieuw indexeren\u{2026}",
+            "es": "Reindexando %d sistema(s)\u{2026}", "it": "Reindicizzazione di %d sistema/i\u{2026}",
+            "sv": "Indexerar om %d system\u{2026}", "nb": "Reindekserer %d system(er)\u{2026}",
+            "da": "Genindekserer %d system(er)\u{2026}", "ja": "%d 台のシステムを再インデックス中\u{2026}",
+            "pt": "Reindexando %d sistema(s)\u{2026}", "pl": "Ponowne indeksowanie %d systemu(ów)\u{2026}",
+            "zh-Hans": "正在重新索引 %d 个系统\u{2026}",
+        ],
+        "fixedLineOutVolume": [
+            "en": "Line-out volume is fixed on this device \u{2014} set it in the Sonos app.",
+            "de": "Die Line-Out-Lautstärke ist auf diesem Gerät fest eingestellt \u{2014} ändern Sie sie in der Sonos-App.",
+            "fr": "Le volume de sortie ligne est fixe sur cet appareil \u{2014} réglez-le dans l'app Sonos.",
+            "nl": "Het line-out-volume is vast op dit apparaat \u{2014} stel het in de Sonos-app in.",
+            "es": "El volumen de salida de línea es fijo en este dispositivo \u{2014} ajústelo en la app Sonos.",
+            "it": "Il volume dell'uscita di linea è fisso su questo dispositivo \u{2014} impostalo nell'app Sonos.",
+            "sv": "Line-out-volymen är fast på den här enheten \u{2014} ställ in den i Sonos-appen.",
+            "nb": "Line-out-volumet er fast på denne enheten \u{2014} still det inn i Sonos-appen.",
+            "da": "Line-out-lydstyrken er fast på denne enhed \u{2014} indstil den i Sonos-appen.",
+            "ja": "このデバイスのライン出力音量は固定です \u{2014} Sonosアプリで設定してください。",
+            "pt": "O volume da saída de linha é fixo neste dispositivo \u{2014} defina-o no app Sonos.",
+            "pl": "Głośność wyjścia liniowego jest stała na tym urządzeniu \u{2014} ustaw ją w aplikacji Sonos.",
+            "zh-Hans": "此设备的线路输出音量是固定的 \u{2014} 请在 Sonos 应用中设置。",
+        ],
+        "fixedShort": [
+            "en": "Fixed", "de": "Fest", "fr": "Fixe", "nl": "Vast",
+            "es": "Fijo", "it": "Fisso", "sv": "Fast", "nb": "Fast",
+            "da": "Fast", "ja": "固定", "pt": "Fixo", "pl": "Stała",
+            "zh-Hans": "固定",
+        ],
+        "fixedVolume": [
+            "en": "Fixed Volume", "de": "Feste Lautstärke", "fr": "Volume fixe", "nl": "Vast volume",
+            "es": "Volumen fijo", "it": "Volume fisso", "sv": "Fast volym", "nb": "Fast volum",
+            "da": "Fast lydstyrke", "ja": "固定音量", "pt": "Volume fixo", "pl": "Stała głośność",
+            "zh-Hans": "固定音量",
+        ],
+        "roomMatchIncludes": [
+            "en": "Includes", "de": "Enthält", "fr": "Inclut", "nl": "Bevat",
+            "es": "Incluye", "it": "Include", "sv": "Innehåller", "nb": "Inneholder",
+            "da": "Indeholder", "ja": "含む", "pt": "Inclui", "pl": "Zawiera",
+            "zh-Hans": "包含",
+        ],
+        "roomMatchExact": [
+            "en": "Exact", "de": "Genau", "fr": "Exact", "nl": "Exact",
+            "es": "Exacto", "it": "Esatto", "sv": "Exakt", "nb": "Nøyaktig",
+            "da": "Nøjagtig", "ja": "完全一致", "pt": "Exato", "pl": "Dokładnie",
+            "zh-Hans": "精确",
+        ],
+        "saveToPlaylist": [
+            "en": "Save to Playlist\u{2026}", "de": "In Playlist speichern\u{2026}",
+            "fr": "Enregistrer dans une liste\u{2026}", "nl": "Opslaan in afspeellijst\u{2026}",
+            "es": "Guardar en lista\u{2026}", "it": "Salva nella playlist\u{2026}",
+            "sv": "Spara i spellista\u{2026}", "nb": "Lagre i spilleliste\u{2026}",
+            "da": "Gem i spilleliste\u{2026}", "ja": "プレイリストに保存\u{2026}",
+            "pt": "Salvar na playlist\u{2026}", "pl": "Zapisz na liście\u{2026}",
+            "zh-Hans": "保存到播放列表\u{2026}",
+        ],
+        "saveQueueTitle": [
+            "en": "Save Queue to Playlist", "de": "Warteschlange in Playlist speichern",
+            "fr": "Enregistrer la file dans une liste", "nl": "Wachtrij opslaan in afspeellijst",
+            "es": "Guardar cola en lista", "it": "Salva coda nella playlist",
+            "sv": "Spara kö till spellista", "nb": "Lagre kø til spilleliste",
+            "da": "Gem kø i spilleliste", "ja": "キューをプレイリストに保存",
+            "pt": "Salvar fila na playlist", "pl": "Zapisz kolejkę na liście",
+            "zh-Hans": "将队列保存到播放列表",
+        ],
+        "saveDestination": [
+            "en": "Save to", "de": "Speichern in", "fr": "Enregistrer dans", "nl": "Opslaan in",
+            "es": "Guardar en", "it": "Salva in", "sv": "Spara till", "nb": "Lagre til",
+            "da": "Gem i", "ja": "保存先", "pt": "Salvar em", "pl": "Zapisz w",
+            "zh-Hans": "保存到",
+        ],
+        "sonosDestination": [
+            "en": "Sonos", "de": "Sonos", "fr": "Sonos", "nl": "Sonos",
+            "es": "Sonos", "it": "Sonos", "sv": "Sonos", "nb": "Sonos",
+            "da": "Sonos", "ja": "Sonos", "pt": "Sonos", "pl": "Sonos",
+            "zh-Hans": "Sonos",
+        ],
+        "queueSourceFormat": [
+            "en": "Source: %@", "de": "Quelle: %@", "fr": "Source : %@", "nl": "Bron: %@",
+            "es": "Origen: %@", "it": "Origine: %@", "sv": "Källa: %@", "nb": "Kilde: %@",
+            "da": "Kilde: %@", "ja": "ソース：%@", "pt": "Origem: %@", "pl": "Źródło: %@",
+            "zh-Hans": "来源：%@",
+        ],
+        "saveToAppleMusic": [
+            "en": "Save Queue to Apple Music", "de": "Warteschlange in Apple Music speichern",
+            "fr": "Enregistrer la file dans Apple Music", "nl": "Wachtrij opslaan in Apple Music",
+            "es": "Guardar cola en Apple Music", "it": "Salva coda in Apple Music",
+            "sv": "Spara kö till Apple Music", "nb": "Lagre kø til Apple Music",
+            "da": "Gem kø i Apple Music", "ja": "キューをApple Musicに保存",
+            "pt": "Salvar fila no Apple Music", "pl": "Zapisz kolejkę w Apple Music",
+            "zh-Hans": "将队列保存到 Apple Music",
+        ],
+        "appleMusicSaveFailed": [
+            "en": "Couldn\u{2019}t save to Apple Music", "de": "Speichern in Apple Music fehlgeschlagen",
+            "fr": "Échec de l'enregistrement dans Apple Music", "nl": "Opslaan in Apple Music mislukt",
+            "es": "No se pudo guardar en Apple Music", "it": "Impossibile salvare in Apple Music",
+            "sv": "Det gick inte att spara till Apple Music", "nb": "Kunne ikke lagre til Apple Music",
+            "da": "Kunne ikke gemme i Apple Music", "ja": "Apple Musicに保存できませんでした",
+            "pt": "Não foi possível salvar no Apple Music", "pl": "Nie można zapisać w Apple Music",
+            "zh-Hans": "无法保存到 Apple Music",
+        ],
+        "savedToAppleMusicFormat": [
+            "en": "Saved %d track(s) to Apple Music", "de": "%d Titel in Apple Music gespeichert",
+            "fr": "%d titre(s) enregistré(s) dans Apple Music", "nl": "%d nummer(s) opgeslagen in Apple Music",
+            "es": "%d canción(es) guardada(s) en Apple Music", "it": "%d brano/i salvato/i in Apple Music",
+            "sv": "%d låt(ar) sparade till Apple Music", "nb": "%d spor lagret til Apple Music",
+            "da": "%d numre gemt i Apple Music", "ja": "%d 曲をApple Musicに保存しました",
+            "pt": "%d faixa(s) salva(s) no Apple Music", "pl": "Zapisano %d utwór(ów) w Apple Music",
+            "zh-Hans": "已将 %d 首曲目保存到 Apple Music",
+        ],
+
+        // ========================
+        // MARK: Apple Music (MusicKit) connect-row + detail views
+        // ========================
+        "amConnected": [
+            "en": "Connected", "de": "Verbunden", "fr": "Connecté", "nl": "Verbonden",
+            "es": "Conectado", "it": "Connesso", "sv": "Ansluten", "nb": "Tilkoblet",
+            "da": "Forbundet", "ja": "接続済み", "pt": "Conectado", "pl": "Połączono",
+            "zh-Hans": "已连接",
+        ],
+        "amConnectedStorefrontFormat": [
+            "en": "Connected (%@)", "de": "Verbunden (%@)", "fr": "Connecté (%@)", "nl": "Verbonden (%@)",
+            "es": "Conectado (%@)", "it": "Connesso (%@)", "sv": "Ansluten (%@)", "nb": "Tilkoblet (%@)",
+            "da": "Forbundet (%@)", "ja": "接続済み (%@)", "pt": "Conectado (%@)", "pl": "Połączono (%@)",
+            "zh-Hans": "已连接 (%@)",
+        ],
+        "amPermissionDenied": [
+            "en": "Permission denied", "de": "Zugriff verweigert", "fr": "Autorisation refusée",
+            "nl": "Toegang geweigerd", "es": "Permiso denegado", "it": "Autorizzazione negata",
+            "sv": "Åtkomst nekad", "nb": "Tilgang nektet", "da": "Adgang nægtet",
+            "ja": "アクセスが拒否されました", "pt": "Permissão negada", "pl": "Odmowa dostępu",
+            "zh-Hans": "权限被拒绝",
+        ],
+        "amNoActiveSubscription": [
+            "en": "No active subscription", "de": "Kein aktives Abonnement",
+            "fr": "Aucun abonnement actif", "nl": "Geen actief abonnement",
+            "es": "Sin suscripción activa", "it": "Nessun abbonamento attivo",
+            "sv": "Ingen aktiv prenumeration", "nb": "Ingen aktivt abonnement",
+            "da": "Intet aktivt abonnement", "ja": "有効なサブスクリプションがありません",
+            "pt": "Sem assinatura ativa", "pl": "Brak aktywnej subskrypcji",
+            "zh-Hans": "无有效订阅",
+        ],
+        "amNotConnected": [
+            "en": "Not connected", "de": "Nicht verbunden", "fr": "Non connecté",
+            "nl": "Niet verbonden", "es": "No conectado", "it": "Non connesso",
+            "sv": "Inte ansluten", "nb": "Ikke tilkoblet", "da": "Ikke forbundet",
+            "ja": "未接続", "pt": "Não conectado", "pl": "Nie połączono",
+            "zh-Hans": "未连接",
+        ],
+        "amNotAvailableInBuild": [
+            "en": "Not available in this build", "de": "In dieser Version nicht verfügbar",
+            "fr": "Indisponible dans cette version", "nl": "Niet beschikbaar in deze versie",
+            "es": "No disponible en esta versión", "it": "Non disponibile in questa versione",
+            "sv": "Inte tillgängligt i den här versionen", "nb": "Ikke tilgjengelig i denne versjonen",
+            "da": "Ikke tilgængelig i denne version", "ja": "このビルドでは利用できません",
+            "pt": "Indisponível nesta versão", "pl": "Niedostępne w tej wersji",
+            "zh-Hans": "此版本中不可用",
+        ],
+        "amDetailConnected": [
+            "en": "Catalog browse, search, library, recommendations.",
+            "de": "Katalog durchsuchen, suchen, Mediathek, Empfehlungen.",
+            "fr": "Parcourir le catalogue, recherche, bibliothèque, recommandations.",
+            "nl": "Catalogus bladeren, zoeken, bibliotheek, aanbevelingen.",
+            "es": "Explorar catálogo, búsqueda, biblioteca, recomendaciones.",
+            "it": "Sfoglia catalogo, ricerca, libreria, consigli.",
+            "sv": "Bläddra i katalog, sök, bibliotek, rekommendationer.",
+            "nb": "Bla i katalog, søk, bibliotek, anbefalinger.",
+            "da": "Gennemse katalog, søg, bibliotek, anbefalinger.",
+            "ja": "カタログの閲覧、検索、ライブラリ、おすすめ。",
+            "pt": "Navegar no catálogo, pesquisa, biblioteca, recomendações.",
+            "pl": "Przeglądanie katalogu, wyszukiwanie, biblioteka, polecane.",
+            "zh-Hans": "目录浏览、搜索、资料库、推荐。",
+        ],
+        "amDetailDenied": [
+            "en": "Grant Apple Music access under Privacy & Security \u{2192} Media & Apple Music to enable.",
+            "de": "Apple Music-Zugriff unter Datenschutz & Sicherheit \u{2192} Medien & Apple Music erteilen, um zu aktivieren.",
+            "fr": "Accordez l'accès à Apple Music dans Confidentialité et sécurité \u{2192} Médias et Apple Music pour activer.",
+            "nl": "Verleen Apple Music-toegang onder Privacy en beveiliging \u{2192} Media en Apple Music om in te schakelen.",
+            "es": "Conceda acceso a Apple Music en Privacidad y seguridad \u{2192} Multimedia y Apple Music para activar.",
+            "it": "Concedi l'accesso ad Apple Music in Privacy e sicurezza \u{2192} Media e Apple Music per abilitare.",
+            "sv": "Bevilja Apple Music-åtkomst under Integritet och säkerhet \u{2192} Medier och Apple Music för att aktivera.",
+            "nb": "Gi Apple Music-tilgang under Personvern og sikkerhet \u{2192} Medier og Apple Music for å aktivere.",
+            "da": "Giv Apple Music-adgang under Anonymitet og sikkerhed \u{2192} Medier og Apple Music for at aktivere.",
+            "ja": "有効にするには、「プライバシーとセキュリティ」\u{2192}「メディアとApple Music」でApple Musicへのアクセスを許可してください。",
+            "pt": "Conceda acesso ao Apple Music em Privacidade e Segurança \u{2192} Mídia e Apple Music para ativar.",
+            "pl": "Aby włączyć, przyznaj dostęp do Apple Music w Prywatność i bezpieczeństwo \u{2192} Multimedia i Apple Music.",
+            "zh-Hans": "请在“隐私与安全性”\u{2192}“媒体与 Apple Music”中授予 Apple Music 访问权限以启用。",
+        ],
+        "amDetailNoSubscription": [
+            "en": "An active Apple Music subscription on the signed-in Apple ID is required.",
+            "de": "Ein aktives Apple Music-Abonnement der angemeldeten Apple-ID ist erforderlich.",
+            "fr": "Un abonnement Apple Music actif sur l'identifiant Apple connecté est requis.",
+            "nl": "Een actief Apple Music-abonnement op de aangemelde Apple ID is vereist.",
+            "es": "Se requiere una suscripción activa a Apple Music en el ID de Apple con sesión iniciada.",
+            "it": "È richiesto un abbonamento Apple Music attivo sull'ID Apple con cui hai eseguito l'accesso.",
+            "sv": "Ett aktivt Apple Music-abonnemang på det inloggade Apple-ID:t krävs.",
+            "nb": "Et aktivt Apple Music-abonnement på den påloggede Apple-ID-en kreves.",
+            "da": "Et aktivt Apple Music-abonnement på det tilmeldte Apple-id kræves.",
+            "ja": "サインイン中のApple IDで有効なApple Musicサブスクリプションが必要です。",
+            "pt": "É necessária uma assinatura ativa do Apple Music no ID Apple conectado.",
+            "pl": "Wymagana jest aktywna subskrypcja Apple Music na zalogowanym Apple ID.",
+            "zh-Hans": "需要已登录 Apple ID 拥有有效的 Apple Music 订阅。",
+        ],
+        "amDetailNotConnected": [
+            "en": "Allow Choragus to read your Apple Music catalogue to enable the MusicKit browse pane.",
+            "de": "Erlaube Choragus, deinen Apple Music-Katalog zu lesen, um den MusicKit-Browser zu aktivieren.",
+            "fr": "Autorisez Choragus à lire votre catalogue Apple Music pour activer le volet de navigation MusicKit.",
+            "nl": "Geef Choragus toestemming om je Apple Music-catalogus te lezen om het MusicKit-bladervenster in te schakelen.",
+            "es": "Permite que Choragus lea tu catálogo de Apple Music para activar el panel de exploración de MusicKit.",
+            "it": "Consenti a Choragus di leggere il tuo catalogo Apple Music per abilitare il pannello di esplorazione MusicKit.",
+            "sv": "Tillåt Choragus att läsa din Apple Music-katalog för att aktivera MusicKit-bläddringspanelen.",
+            "nb": "Tillat Choragus å lese Apple Music-katalogen din for å aktivere MusicKit-bla-panelet.",
+            "da": "Tillad Choragus at læse dit Apple Music-katalog for at aktivere MusicKit-gennemse-panelet.",
+            "ja": "MusicKitのブラウズペインを有効にするには、ChoragusにApple Musicカタログの読み取りを許可してください。",
+            "pt": "Permita que o Choragus leia seu catálogo do Apple Music para ativar o painel de navegação do MusicKit.",
+            "pl": "Zezwól aplikacji Choragus na odczyt katalogu Apple Music, aby włączyć panel przeglądania MusicKit.",
+            "zh-Hans": "允许 Choragus 读取您的 Apple Music 目录，以启用 MusicKit 浏览面板。",
+        ],
+        "amActionInProgress": [
+            "en": "Action in progress\u{2026}", "de": "Aktion läuft\u{2026}",
+            "fr": "Action en cours\u{2026}", "nl": "Actie wordt uitgevoerd\u{2026}",
+            "es": "Acción en curso\u{2026}", "it": "Azione in corso\u{2026}",
+            "sv": "Åtgärd pågår\u{2026}", "nb": "Handling pågår\u{2026}",
+            "da": "Handling i gang\u{2026}", "ja": "処理中\u{2026}",
+            "pt": "Ação em andamento\u{2026}", "pl": "Trwa operacja\u{2026}",
+            "zh-Hans": "操作进行中\u{2026}",
+        ],
+        "amPlayingFormat": [
+            "en": "Playing %@\u{2026}", "de": "%@ wird abgespielt\u{2026}",
+            "fr": "Lecture de %@\u{2026}", "nl": "%@ afspelen\u{2026}",
+            "es": "Reproduciendo %@\u{2026}", "it": "Riproduzione di %@\u{2026}",
+            "sv": "Spelar %@\u{2026}", "nb": "Spiller %@\u{2026}",
+            "da": "Afspiller %@\u{2026}", "ja": "%@ を再生中\u{2026}",
+            "pt": "Reproduzindo %@\u{2026}", "pl": "Odtwarzanie %@\u{2026}",
+            "zh-Hans": "正在播放 %@\u{2026}",
+        ],
+        "amQueueingNextFormat": [
+            "en": "Queueing %@ next\u{2026}", "de": "%@ wird als Nächstes eingereiht\u{2026}",
+            "fr": "Mise en file de %@ ensuite\u{2026}", "nl": "%@ als volgende in wachtrij\u{2026}",
+            "es": "Poniendo %@ a continuación\u{2026}", "it": "%@ in coda come successivo\u{2026}",
+            "sv": "Köar %@ härnäst\u{2026}", "nb": "Køer %@ som neste\u{2026}",
+            "da": "Sætter %@ i kø som næste\u{2026}", "ja": "%@ を次にキューに追加中\u{2026}",
+            "pt": "Enfileirando %@ como próximo\u{2026}", "pl": "Kolejkowanie %@ jako następne\u{2026}",
+            "zh-Hans": "正在将 %@ 加入下一首\u{2026}",
+        ],
+        "amAddingToQueueFormat": [
+            "en": "Adding %@ to queue\u{2026}", "de": "%@ wird zur Warteschlange hinzugefügt\u{2026}",
+            "fr": "Ajout de %@ à la file\u{2026}", "nl": "%@ toevoegen aan wachtrij\u{2026}",
+            "es": "Añadiendo %@ a la cola\u{2026}", "it": "Aggiunta di %@ alla coda\u{2026}",
+            "sv": "Lägger till %@ i kön\u{2026}", "nb": "Legger til %@ i køen\u{2026}",
+            "da": "Tilføjer %@ til køen\u{2026}", "ja": "%@ をキューに追加中\u{2026}",
+            "pt": "Adicionando %@ à fila\u{2026}", "pl": "Dodawanie %@ do kolejki\u{2026}",
+            "zh-Hans": "正在将 %@ 加入队列\u{2026}",
+        ],
+        "amPlayingTopSongsFormat": [
+            "en": "Playing %@ top songs\u{2026}", "de": "Top-Titel von %@ werden abgespielt\u{2026}",
+            "fr": "Lecture des meilleurs titres de %@\u{2026}", "nl": "Topnummers van %@ afspelen\u{2026}",
+            "es": "Reproduciendo las canciones principales de %@\u{2026}", "it": "Riproduzione dei brani principali di %@\u{2026}",
+            "sv": "Spelar de bästa låtarna av %@\u{2026}", "nb": "Spiller de beste sangene av %@\u{2026}",
+            "da": "Afspiller de bedste sange af %@\u{2026}", "ja": "%@ の人気曲を再生中\u{2026}",
+            "pt": "Reproduzindo as principais músicas de %@\u{2026}", "pl": "Odtwarzanie najlepszych utworów %@\u{2026}",
+            "zh-Hans": "正在播放 %@ 的热门歌曲\u{2026}",
+        ],
+        "amQueueingTopSongsNextFormat": [
+            "en": "Queueing %@ top songs next\u{2026}", "de": "Top-Titel von %@ werden als Nächstes eingereiht\u{2026}",
+            "fr": "Mise en file des meilleurs titres de %@ ensuite\u{2026}", "nl": "Topnummers van %@ als volgende in wachtrij\u{2026}",
+            "es": "Poniendo las canciones principales de %@ a continuación\u{2026}", "it": "Brani principali di %@ in coda come successivi\u{2026}",
+            "sv": "Köar de bästa låtarna av %@ härnäst\u{2026}", "nb": "Køer de beste sangene av %@ som neste\u{2026}",
+            "da": "Sætter de bedste sange af %@ i kø som næste\u{2026}", "ja": "%@ の人気曲を次にキューに追加中\u{2026}",
+            "pt": "Enfileirando as principais músicas de %@ como próximas\u{2026}", "pl": "Kolejkowanie najlepszych utworów %@ jako następne\u{2026}",
+            "zh-Hans": "正在将 %@ 的热门歌曲加入下一首\u{2026}",
+        ],
+        "amAddingTopSongsToQueueFormat": [
+            "en": "Adding %@ top songs to queue\u{2026}", "de": "Top-Titel von %@ werden zur Warteschlange hinzugefügt\u{2026}",
+            "fr": "Ajout des meilleurs titres de %@ à la file\u{2026}", "nl": "Topnummers van %@ toevoegen aan wachtrij\u{2026}",
+            "es": "Añadiendo las canciones principales de %@ a la cola\u{2026}", "it": "Aggiunta dei brani principali di %@ alla coda\u{2026}",
+            "sv": "Lägger till de bästa låtarna av %@ i kön\u{2026}", "nb": "Legger til de beste sangene av %@ i køen\u{2026}",
+            "da": "Tilføjer de bedste sange af %@ til køen\u{2026}", "ja": "%@ の人気曲をキューに追加中\u{2026}",
+            "pt": "Adicionando as principais músicas de %@ à fila\u{2026}", "pl": "Dodawanie najlepszych utworów %@ do kolejki\u{2026}",
+            "zh-Hans": "正在将 %@ 的热门歌曲加入队列\u{2026}",
+        ],
+        "amPlayingTracksFormat": [
+            "en": "Playing %d track(s)\u{2026}", "de": "%d Titel werden abgespielt\u{2026}",
+            "fr": "Lecture de %d piste(s)\u{2026}", "nl": "%d nummer(s) afspelen\u{2026}",
+            "es": "Reproduciendo %d pista(s)\u{2026}", "it": "Riproduzione di %d brano/i\u{2026}",
+            "sv": "Spelar %d låt(ar)\u{2026}", "nb": "Spiller %d spor\u{2026}",
+            "da": "Afspiller %d numre\u{2026}", "ja": "%d 曲を再生中\u{2026}",
+            "pt": "Reproduzindo %d faixa(s)\u{2026}", "pl": "Odtwarzanie %d utworu(ów)\u{2026}",
+            "zh-Hans": "正在播放 %d 首曲目\u{2026}",
+        ],
+        "amAddingTracksToQueueFormat": [
+            "en": "Adding %d track(s) to queue\u{2026}", "de": "%d Titel werden zur Warteschlange hinzugefügt\u{2026}",
+            "fr": "Ajout de %d piste(s) à la file\u{2026}", "nl": "%d nummer(s) toevoegen aan wachtrij\u{2026}",
+            "es": "Añadiendo %d pista(s) a la cola\u{2026}", "it": "Aggiunta di %d brano/i alla coda\u{2026}",
+            "sv": "Lägger till %d låt(ar) i kön\u{2026}", "nb": "Legger til %d spor i køen\u{2026}",
+            "da": "Tilføjer %d numre til køen\u{2026}", "ja": "%d 曲をキューに追加中\u{2026}",
+            "pt": "Adicionando %d faixa(s) à fila\u{2026}", "pl": "Dodawanie %d utworu(ów) do kolejki\u{2026}",
+            "zh-Hans": "正在将 %d 首曲目加入队列\u{2026}",
+        ],
+        "amQueueingTracksNextFormat": [
+            "en": "Queueing %d track(s) next\u{2026}", "de": "%d Titel werden als Nächstes eingereiht\u{2026}",
+            "fr": "Mise en file de %d piste(s) ensuite\u{2026}", "nl": "%d nummer(s) als volgende in wachtrij\u{2026}",
+            "es": "Poniendo %d pista(s) a continuación\u{2026}", "it": "%d brano/i in coda come successivi\u{2026}",
+            "sv": "Köar %d låt(ar) härnäst\u{2026}", "nb": "Køer %d spor som neste\u{2026}",
+            "da": "Sætter %d numre i kø som næste\u{2026}", "ja": "%d 曲を次にキューに追加中\u{2026}",
+            "pt": "Enfileirando %d faixa(s) como próximas\u{2026}", "pl": "Kolejkowanie %d utworu(ów) jako następne\u{2026}",
+            "zh-Hans": "正在将 %d 首曲目加入下一首\u{2026}",
+        ],
+        "amPlayAll": [
+            "en": "Play All", "de": "Alle abspielen", "fr": "Tout lire", "nl": "Alles afspelen",
+            "es": "Reproducir todo", "it": "Riproduci tutto", "sv": "Spela alla", "nb": "Spill alle",
+            "da": "Afspil alle", "ja": "すべて再生", "pt": "Reproduzir tudo", "pl": "Odtwórz wszystko",
+            "zh-Hans": "全部播放",
+        ],
+        "amAddAllToQueue": [
+            "en": "Add All to Queue", "de": "Alle zur Warteschlange hinzufügen",
+            "fr": "Tout ajouter à la file", "nl": "Alles toevoegen aan wachtrij",
+            "es": "Añadir todo a la cola", "it": "Aggiungi tutto alla coda",
+            "sv": "Lägg till alla i kön", "nb": "Legg alle til i køen",
+            "da": "Tilføj alle til køen", "ja": "すべてキューに追加",
+            "pt": "Adicionar tudo à fila", "pl": "Dodaj wszystko do kolejki",
+            "zh-Hans": "全部加入队列",
+        ],
+        "amTopSongs": [
+            "en": "Top Songs", "de": "Top-Titel", "fr": "Meilleurs titres", "nl": "Topnummers",
+            "es": "Canciones principales", "it": "Brani principali", "sv": "Bästa låtarna", "nb": "Beste sanger",
+            "da": "Bedste sange", "ja": "人気曲", "pt": "Principais músicas", "pl": "Najlepsze utwory",
+            "zh-Hans": "热门歌曲",
+        ],
+        "amTopAlbums": [
+            "en": "Top Albums", "de": "Top-Alben", "fr": "Meilleurs albums", "nl": "Topalbums",
+            "es": "Álbumes principales", "it": "Album principali", "sv": "Bästa albumen", "nb": "Beste album",
+            "da": "Bedste album", "ja": "人気アルバム", "pt": "Principais álbuns", "pl": "Najlepsze albumy",
+            "zh-Hans": "热门专辑",
+        ],
+        "amAlbums": [
+            "en": "Albums", "de": "Alben", "fr": "Albums", "nl": "Albums",
+            "es": "Álbumes", "it": "Album", "sv": "Album", "nb": "Album",
+            "da": "Album", "ja": "アルバム", "pt": "Álbuns", "pl": "Albumy",
+            "zh-Hans": "专辑",
+        ],
+        "amStations": [
+            "en": "Stations", "de": "Sender", "fr": "Stations", "nl": "Stations",
+            "es": "Emisoras", "it": "Stazioni", "sv": "Stationer", "nb": "Stasjoner",
+            "da": "Stationer", "ja": "ステーション", "pt": "Estações", "pl": "Stacje",
+            "zh-Hans": "电台",
+        ],
+        "amNoTracks": [
+            "en": "No tracks", "de": "Keine Titel", "fr": "Aucune piste", "nl": "Geen nummers",
+            "es": "Sin pistas", "it": "Nessun brano", "sv": "Inga låtar", "nb": "Ingen spor",
+            "da": "Ingen numre", "ja": "曲がありません", "pt": "Nenhuma faixa", "pl": "Brak utworów",
+            "zh-Hans": "没有曲目",
+        ],
+        "amNothingToShow": [
+            "en": "Nothing to show", "de": "Nichts anzuzeigen", "fr": "Rien à afficher", "nl": "Niets om te tonen",
+            "es": "Nada que mostrar", "it": "Niente da mostrare", "sv": "Inget att visa", "nb": "Ingenting å vise",
+            "da": "Intet at vise", "ja": "表示するものがありません", "pt": "Nada para mostrar", "pl": "Nic do wyświetlenia",
+            "zh-Hans": "没有可显示的内容",
+        ],
+        "amFilterGenres": [
+            "en": "Filter genres", "de": "Genres filtern", "fr": "Filtrer les genres", "nl": "Genres filteren",
+            "es": "Filtrar géneros", "it": "Filtra generi", "sv": "Filtrera genrer", "nb": "Filtrer sjangre",
+            "da": "Filtrer genrer", "ja": "ジャンルを絞り込む", "pt": "Filtrar gêneros", "pl": "Filtruj gatunki",
+            "zh-Hans": "筛选流派",
+        ],
+        "amNoChartsForGenre": [
+            "en": "No charts for this genre", "de": "Keine Charts für dieses Genre", "fr": "Aucun classement pour ce genre", "nl": "Geen hitlijsten voor dit genre",
+            "es": "No hay listas para este género", "it": "Nessuna classifica per questo genere", "sv": "Inga listor för denna genre", "nb": "Ingen lister for denne sjangeren",
+            "da": "Ingen hitlister for denne genre", "ja": "このジャンルのチャートはありません", "pt": "Sem paradas para este gênero", "pl": "Brak list dla tego gatunku",
+            "zh-Hans": "此流派没有排行榜",
+        ],
+        "amSearchHint": [
+            "en": "Try \"jazz\", \"pop\", \"rock\", \"chill\" or an artist name.",
+            "de": "Versuchen Sie \"jazz\", \"pop\", \"rock\", \"chill\" oder einen Künstlernamen.",
+            "fr": "Essayez \"jazz\", \"pop\", \"rock\", \"chill\" ou un nom d’artiste.",
+            "nl": "Probeer \"jazz\", \"pop\", \"rock\", \"chill\" of een artiestennaam.",
+            "es": "Prueba \"jazz\", \"pop\", \"rock\", \"chill\" o el nombre de un artista.",
+            "it": "Prova \"jazz\", \"pop\", \"rock\", \"chill\" o il nome di un artista.",
+            "sv": "Prova \"jazz\", \"pop\", \"rock\", \"chill\" eller ett artistnamn.",
+            "nb": "Prøv \"jazz\", \"pop\", \"rock\", \"chill\" eller et artistnavn.",
+            "da": "Prøv \"jazz\", \"pop\", \"rock\", \"chill\" eller et kunstnernavn.",
+            "ja": "「jazz」「pop」「rock」「chill」やアーティスト名を試してください。",
+            "pt": "Tente \"jazz\", \"pop\", \"rock\", \"chill\" ou o nome de um artista.",
+            "pl": "Wypróbuj \"jazz\", \"pop\", \"rock\", \"chill\" lub nazwę wykonawcy.",
+            "zh-Hans": "试试 \"jazz\"、\"pop\"、\"rock\"、\"chill\" 或艺人名称。",
+        ],
+        "amItemsCountFormat": [
+            "en": "%d item(s)", "de": "%d Objekt(e)", "fr": "%d élément(s)", "nl": "%d item(s)",
+            "es": "%d elemento(s)", "it": "%d elemento/i", "sv": "%d objekt", "nb": "%d element(er)",
+            "da": "%d element(er)", "ja": "%d 項目", "pt": "%d item(ns)", "pl": "%d element(ów)",
+            "zh-Hans": "%d 个项目",
+        ],
+        "amTopPlaylists": [
+            "en": "Top Playlists", "de": "Top-Playlists", "fr": "Meilleures playlists", "nl": "Topafspeellijsten",
+            "es": "Listas principales", "it": "Playlist principali", "sv": "Bästa spellistorna", "nb": "Beste spillelister",
+            "da": "Bedste afspilningslister", "ja": "人気プレイリスト", "pt": "Principais playlists", "pl": "Najlepsze playlisty",
+            "zh-Hans": "热门播放列表",
+        ],
+        "amPlaylists": [
+            "en": "Playlists", "de": "Playlists", "fr": "Playlists", "nl": "Afspeellijsten",
+            "es": "Listas de reproducción", "it": "Playlist", "sv": "Spellistor", "nb": "Spillelister",
+            "da": "Afspilningslister", "ja": "プレイリスト", "pt": "Playlists", "pl": "Playlisty",
+            "zh-Hans": "播放列表",
+        ],
+        "amPlaylistBadge": [
+            "en": "Playlist", "de": "Playlist", "fr": "Playlist", "nl": "Afspeellijst",
+            "es": "Lista de reproducción", "it": "Playlist", "sv": "Spellista", "nb": "Spilleliste",
+            "da": "Afspilningsliste", "ja": "プレイリスト", "pt": "Playlist", "pl": "Playlista",
+            "zh-Hans": "播放列表",
+        ],
+        "amEmptyPlaylist": [
+            "en": "Empty playlist", "de": "Leere Playlist", "fr": "Playlist vide", "nl": "Lege afspeellijst",
+            "es": "Lista vacía", "it": "Playlist vuota", "sv": "Tom spellista", "nb": "Tom spilleliste",
+            "da": "Tom afspilningsliste", "ja": "空のプレイリスト", "pt": "Playlist vazia", "pl": "Pusta playlista",
+            "zh-Hans": "空播放列表",
+        ],
+        "amSearchStationsPlaceholder": [
+            "en": "Search stations (artist, genre, mood)",
+            "de": "Sender suchen (Künstler, Genre, Stimmung)",
+            "fr": "Rechercher des stations (artiste, genre, ambiance)",
+            "nl": "Stations zoeken (artiest, genre, sfeer)",
+            "es": "Buscar emisoras (artista, género, ambiente)",
+            "it": "Cerca stazioni (artista, genere, atmosfera)",
+            "sv": "Sök stationer (artist, genre, stämning)",
+            "nb": "Søk stasjoner (artist, sjanger, stemning)",
+            "da": "Søg stationer (kunstner, genre, stemning)",
+            "ja": "ステーションを検索（アーティスト、ジャンル、ムード）",
+            "pt": "Buscar estações (artista, gênero, clima)",
+            "pl": "Szukaj stacji (wykonawca, gatunek, nastrój)",
+            "zh-Hans": "搜索电台（艺人、流派、氛围）",
+        ],
+        "amSearchAppleMusicStations": [
+            "en": "Search Apple Music stations", "de": "Apple Music-Sender suchen",
+            "fr": "Rechercher des stations Apple Music", "nl": "Apple Music-stations zoeken",
+            "es": "Buscar emisoras de Apple Music", "it": "Cerca stazioni Apple Music",
+            "sv": "Sök Apple Music-stationer", "nb": "Søk Apple Music-stasjoner",
+            "da": "Søg Apple Music-stationer", "ja": "Apple Musicのステーションを検索",
+            "pt": "Buscar estações do Apple Music", "pl": "Szukaj stacji Apple Music",
+            "zh-Hans": "搜索 Apple Music 电台",
+        ],
+        "amNoStationsFound": [
+            "en": "No stations found", "de": "Keine Sender gefunden", "fr": "Aucune station trouvée",
+            "nl": "Geen stations gevonden", "es": "No se encontraron emisoras", "it": "Nessuna stazione trovata",
+            "sv": "Inga stationer hittades", "nb": "Fant ingen stasjoner", "da": "Ingen stationer fundet",
+            "ja": "ステーションが見つかりません", "pt": "Nenhuma estação encontrada", "pl": "Nie znaleziono stacji",
+            "zh-Hans": "未找到电台",
+        ],
+        "amSortDefault": [
+            "en": "Default", "de": "Standard", "fr": "Par défaut", "nl": "Standaard",
+            "es": "Predeterminado", "it": "Predefinito", "sv": "Standard", "nb": "Standard",
+            "da": "Standard", "ja": "デフォルト", "pt": "Padrão", "pl": "Domyślnie",
+            "zh-Hans": "默认",
+        ],
+        "amSortName": [
+            "en": "Name", "de": "Name", "fr": "Nom", "nl": "Naam",
+            "es": "Nombre", "it": "Nome", "sv": "Namn", "nb": "Navn",
+            "da": "Navn", "ja": "名前", "pt": "Nome", "pl": "Nazwa",
+            "zh-Hans": "名称",
+        ],
+        "amSortLiveFirst": [
+            "en": "Live First", "de": "Live zuerst", "fr": "En direct d'abord", "nl": "Live eerst",
+            "es": "En directo primero", "it": "Dal vivo prima", "sv": "Live först", "nb": "Direkte først",
+            "da": "Live først", "ja": "ライブ優先", "pt": "Ao vivo primeiro", "pl": "Najpierw na żywo",
+            "zh-Hans": "直播优先",
+        ],
+        "amSortTitle": [
+            "en": "Title", "de": "Titel", "fr": "Titre", "nl": "Titel",
+            "es": "Título", "it": "Titolo", "sv": "Titel", "nb": "Tittel",
+            "da": "Titel", "ja": "タイトル", "pt": "Título", "pl": "Tytuł",
+            "zh-Hans": "标题",
+        ],
+        "amSortArtist": [
+            "en": "Artist", "de": "Künstler", "fr": "Artiste", "nl": "Artiest",
+            "es": "Artista", "it": "Artista", "sv": "Artist", "nb": "Artist",
+            "da": "Kunstner", "ja": "アーティスト", "pt": "Artista", "pl": "Wykonawca",
+            "zh-Hans": "艺人",
+        ],
+        "amSortAlbum": [
+            "en": "Album", "de": "Album", "fr": "Album", "nl": "Album",
+            "es": "Álbum", "it": "Album", "sv": "Album", "nb": "Album",
+            "da": "Album", "ja": "アルバム", "pt": "Álbum", "pl": "Album",
+            "zh-Hans": "专辑",
+        ],
+        "amSortDuration": [
+            "en": "Duration", "de": "Dauer", "fr": "Durée", "nl": "Duur",
+            "es": "Duración", "it": "Durata", "sv": "Längd", "nb": "Varighet",
+            "da": "Varighed", "ja": "再生時間", "pt": "Duração", "pl": "Czas trwania",
+            "zh-Hans": "时长",
+        ],
+        "amSortNewest": [
+            "en": "Newest", "de": "Neueste", "fr": "Plus récent", "nl": "Nieuwste",
+            "es": "Más reciente", "it": "Più recente", "sv": "Senaste", "nb": "Nyeste",
+            "da": "Nyeste", "ja": "新しい順", "pt": "Mais recente", "pl": "Najnowsze",
+            "zh-Hans": "最新",
+        ],
+        "amSortOldest": [
+            "en": "Oldest", "de": "Älteste", "fr": "Plus ancien", "nl": "Oudste",
+            "es": "Más antiguo", "it": "Più vecchio", "sv": "Äldsta", "nb": "Eldste",
+            "da": "Ældste", "ja": "古い順", "pt": "Mais antigo", "pl": "Najstarsze",
+            "zh-Hans": "最早",
+        ],
+        "amSortRecentlyAdded": [
+            "en": "Recently Added", "de": "Zuletzt hinzugefügt", "fr": "Ajout récent", "nl": "Onlangs toegevoegd",
+            "es": "Añadido recientemente", "it": "Aggiunti di recente", "sv": "Nyligen tillagda", "nb": "Nylig lagt til",
+            "da": "Senest tilføjet", "ja": "最近追加した項目", "pt": "Adicionado recentemente", "pl": "Ostatnio dodane",
+            "zh-Hans": "最近添加",
+        ],
+        "amSortFirstAdded": [
+            "en": "First Added", "de": "Zuerst hinzugefügt", "fr": "Ajouté en premier", "nl": "Eerst toegevoegd",
+            "es": "Añadido primero", "it": "Aggiunti per primi", "sv": "Först tillagda", "nb": "Først lagt til",
+            "da": "Først tilføjet", "ja": "最初に追加した項目", "pt": "Adicionado primeiro", "pl": "Najpierw dodane",
+            "zh-Hans": "最先添加",
+        ],
+        "amSortLabelPlain": [
+            "en": "Sort", "de": "Sortieren", "fr": "Trier", "nl": "Sorteren",
+            "es": "Ordenar", "it": "Ordina", "sv": "Sortera", "nb": "Sorter",
+            "da": "Sorter", "ja": "並べ替え", "pt": "Ordenar", "pl": "Sortuj",
+            "zh-Hans": "排序",
+        ],
+        "amSortLabelFormat": [
+            "en": "Sort: %@", "de": "Sortieren: %@", "fr": "Trier : %@", "nl": "Sorteren: %@",
+            "es": "Ordenar: %@", "it": "Ordina: %@", "sv": "Sortera: %@", "nb": "Sorter: %@",
+            "da": "Sorter: %@", "ja": "並べ替え: %@", "pt": "Ordenar: %@", "pl": "Sortuj: %@",
+            "zh-Hans": "排序：%@",
+        ],
+        "amConnectAppleMusic": [
+            "en": "Connect Apple Music", "de": "Apple Music verbinden", "fr": "Connecter Apple Music", "nl": "Apple Music verbinden",
+            "es": "Conectar Apple Music", "it": "Connetti Apple Music", "sv": "Anslut Apple Music", "nb": "Koble til Apple Music",
+            "da": "Forbind Apple Music", "ja": "Apple Musicに接続", "pt": "Conectar o Apple Music", "pl": "Połącz Apple Music",
+            "zh-Hans": "连接 Apple Music",
+        ],
+        "amYourLibrary": [
+            "en": "Your Library", "de": "Deine Mediathek", "fr": "Votre bibliothèque", "nl": "Jouw bibliotheek",
+            "es": "Tu biblioteca", "it": "La tua libreria", "sv": "Ditt bibliotek", "nb": "Biblioteket ditt",
+            "da": "Dit bibliotek", "ja": "ライブラリ", "pt": "Sua biblioteca", "pl": "Twoja biblioteka",
+            "zh-Hans": "你的资料库",
+        ],
+        "amRecentlyPlayed": [
+            "en": "Recently Played", "de": "Zuletzt gespielt", "fr": "Écoutés récemment", "nl": "Recent afgespeeld",
+            "es": "Reproducido recientemente", "it": "Riprodotti di recente", "sv": "Senast spelade", "nb": "Nylig spilt",
+            "da": "Senest afspillet", "ja": "最近再生した項目", "pt": "Reproduzidos recentemente", "pl": "Ostatnio odtwarzane",
+            "zh-Hans": "最近播放",
+        ],
+        "amMadeForYou": [
+            "en": "Made for You", "de": "Für dich", "fr": "Pour vous", "nl": "Voor jou",
+            "es": "Hecho para ti", "it": "Per te", "sv": "Skapat för dig", "nb": "Laget for deg",
+            "da": "Lavet til dig", "ja": "あなたのために", "pt": "Feito para você", "pl": "Dla Ciebie",
+            "zh-Hans": "为你推荐",
+        ],
+        "amCharts": [
+            "en": "Charts", "de": "Charts", "fr": "Classements", "nl": "Hitlijsten",
+            "es": "Listas", "it": "Classifiche", "sv": "Listor", "nb": "Lister",
+            "da": "Hitlister", "ja": "チャート", "pt": "Paradas", "pl": "Listy przebojów",
+            "zh-Hans": "排行榜",
+        ],
+        "amBrowse": [
+            "en": "Browse", "de": "Entdecken", "fr": "Parcourir", "nl": "Bladeren",
+            "es": "Explorar", "it": "Sfoglia", "sv": "Bläddra", "nb": "Bla gjennom",
+            "da": "Gennemse", "ja": "見つける", "pt": "Explorar", "pl": "Przeglądaj",
+            "zh-Hans": "浏览",
+        ],
+        "amSearchAppleMusic": [
+            "en": "Search Apple Music", "de": "Apple Music durchsuchen", "fr": "Rechercher dans Apple Music", "nl": "Apple Music doorzoeken",
+            "es": "Buscar en Apple Music", "it": "Cerca in Apple Music", "sv": "Sök i Apple Music", "nb": "Søk i Apple Music",
+            "da": "Søg i Apple Music", "ja": "Apple Musicを検索", "pt": "Buscar no Apple Music", "pl": "Szukaj w Apple Music",
+            "zh-Hans": "搜索 Apple Music",
+        ],
+        "amSongs": [
+            "en": "Songs", "de": "Titel", "fr": "Morceaux", "nl": "Nummers",
+            "es": "Canciones", "it": "Brani", "sv": "Låtar", "nb": "Sanger",
+            "da": "Sange", "ja": "曲", "pt": "Músicas", "pl": "Utwory",
+            "zh-Hans": "歌曲",
+        ],
+        "amArtists": [
+            "en": "Artists", "de": "Interpreten", "fr": "Artistes", "nl": "Artiesten",
+            "es": "Artistas", "it": "Artisti", "sv": "Artister", "nb": "Artister",
+            "da": "Kunstnere", "ja": "アーティスト", "pt": "Artistas", "pl": "Wykonawcy",
+            "zh-Hans": "艺人",
+        ],
+        "amGenres": [
+            "en": "Genres", "de": "Genres", "fr": "Genres", "nl": "Genres",
+            "es": "Géneros", "it": "Generi", "sv": "Genrer", "nb": "Sjangre",
+            "da": "Genrer", "ja": "ジャンル", "pt": "Gêneros", "pl": "Gatunki",
+            "zh-Hans": "流派",
+        ],
+        "amStationsForYou": [
+            "en": "Stations For You", "de": "Sender für dich", "fr": "Stations pour vous", "nl": "Stations voor jou",
+            "es": "Emisoras para ti", "it": "Stazioni per te", "sv": "Stationer för dig", "nb": "Stasjoner for deg",
+            "da": "Stationer til dig", "ja": "あなたへのステーション", "pt": "Estações para você", "pl": "Stacje dla Ciebie",
+            "zh-Hans": "为你推荐的电台",
+        ],
+        "amRadioStations": [
+            "en": "Radio Stations", "de": "Radiosender", "fr": "Stations de radio", "nl": "Radiostations",
+            "es": "Emisoras de radio", "it": "Stazioni radio", "sv": "Radiostationer", "nb": "Radiostasjoner",
+            "da": "Radiostationer", "ja": "ラジオステーション", "pt": "Estações de rádio", "pl": "Stacje radiowe",
+            "zh-Hans": "广播电台",
+        ],
+        "amNowInSpatialAudio": [
+            "en": "Now in Spatial Audio", "de": "Jetzt in Spatial Audio", "fr": "Maintenant en audio spatial", "nl": "Nu in Spatial Audio",
+            "es": "Ahora en audio espacial", "it": "Ora in audio spaziale", "sv": "Nu i rumslig ljud", "nb": "Nå i romlig lyd",
+            "da": "Nu i rumlig lyd", "ja": "空間オーディオで配信中", "pt": "Agora em áudio espacial", "pl": "Teraz w dźwięku przestrzennym",
+            "zh-Hans": "现可享受空间音频",
+        ],
+        "amSpatialAudio": [
+            "en": "Spatial Audio", "de": "Spatial Audio", "fr": "Audio spatial", "nl": "Spatial Audio",
+            "es": "Audio espacial", "it": "Audio spaziale", "sv": "Rumslig ljud", "nb": "Romlig lyd",
+            "da": "Rumlig lyd", "ja": "空間オーディオ", "pt": "Áudio espacial", "pl": "Dźwięk przestrzenny",
+            "zh-Hans": "空间音频",
+        ],
+        "amLibrarySongs": [
+            "en": "Library Songs", "de": "Titel in der Mediathek", "fr": "Morceaux de la bibliothèque", "nl": "Nummers in bibliotheek",
+            "es": "Canciones de la biblioteca", "it": "Brani della libreria", "sv": "Låtar i biblioteket", "nb": "Sanger i biblioteket",
+            "da": "Sange i biblioteket", "ja": "ライブラリの曲", "pt": "Músicas da biblioteca", "pl": "Utwory z biblioteki",
+            "zh-Hans": "资料库歌曲",
+        ],
+        "amLibraryAlbums": [
+            "en": "Library Albums", "de": "Alben in der Mediathek", "fr": "Albums de la bibliothèque", "nl": "Albums in bibliotheek",
+            "es": "Álbumes de la biblioteca", "it": "Album della libreria", "sv": "Album i biblioteket", "nb": "Album i biblioteket",
+            "da": "Album i biblioteket", "ja": "ライブラリのアルバム", "pt": "Álbuns da biblioteca", "pl": "Albumy z biblioteki",
+            "zh-Hans": "资料库专辑",
+        ],
+        "amLibraryArtists": [
+            "en": "Library Artists", "de": "Interpreten in der Mediathek", "fr": "Artistes de la bibliothèque", "nl": "Artiesten in bibliotheek",
+            "es": "Artistas de la biblioteca", "it": "Artisti della libreria", "sv": "Artister i biblioteket", "nb": "Artister i biblioteket",
+            "da": "Kunstnere i biblioteket", "ja": "ライブラリのアーティスト", "pt": "Artistas da biblioteca", "pl": "Wykonawcy z biblioteki",
+            "zh-Hans": "资料库艺人",
+        ],
+        "amLibraryPlaylists": [
+            "en": "Library Playlists", "de": "Playlists in der Mediathek", "fr": "Playlists de la bibliothèque", "nl": "Afspeellijsten in bibliotheek",
+            "es": "Listas de la biblioteca", "it": "Playlist della libreria", "sv": "Spellistor i biblioteket", "nb": "Spillelister i biblioteket",
+            "da": "Afspilningslister i biblioteket", "ja": "ライブラリのプレイリスト", "pt": "Playlists da biblioteca", "pl": "Playlisty z biblioteki",
+            "zh-Hans": "资料库播放列表",
+        ],
+        "amSeeAllSongs": [
+            "en": "See All Songs", "de": "Alle Titel anzeigen", "fr": "Voir tous les morceaux", "nl": "Alle nummers tonen",
+            "es": "Ver todas las canciones", "it": "Vedi tutti i brani", "sv": "Visa alla låtar", "nb": "Se alle sanger",
+            "da": "Se alle sange", "ja": "すべての曲を表示", "pt": "Ver todas as músicas", "pl": "Pokaż wszystkie utwory",
+            "zh-Hans": "查看全部歌曲",
+        ],
+        "amSeeAllAlbums": [
+            "en": "See All Albums", "de": "Alle Alben anzeigen", "fr": "Voir tous les albums", "nl": "Alle albums tonen",
+            "es": "Ver todos los álbumes", "it": "Vedi tutti gli album", "sv": "Visa alla album", "nb": "Se alle album",
+            "da": "Se alle album", "ja": "すべてのアルバムを表示", "pt": "Ver todos os álbuns", "pl": "Pokaż wszystkie albumy",
+            "zh-Hans": "查看全部专辑",
+        ],
+        "amSeeAllArtists": [
+            "en": "See All Artists", "de": "Alle Interpreten anzeigen", "fr": "Voir tous les artistes", "nl": "Alle artiesten tonen",
+            "es": "Ver todos los artistas", "it": "Vedi tutti gli artisti", "sv": "Visa alla artister", "nb": "Se alle artister",
+            "da": "Se alle kunstnere", "ja": "すべてのアーティストを表示", "pt": "Ver todos os artistas", "pl": "Pokaż wszystkich wykonawców",
+            "zh-Hans": "查看全部艺人",
+        ],
+        "amSeeAllPlaylists": [
+            "en": "See All Playlists", "de": "Alle Playlists anzeigen", "fr": "Voir toutes les playlists", "nl": "Alle afspeellijsten tonen",
+            "es": "Ver todas las listas", "it": "Vedi tutte le playlist", "sv": "Visa alla spellistor", "nb": "Se alle spillelister",
+            "da": "Se alle afspilningslister", "ja": "すべてのプレイリストを表示", "pt": "Ver todas as playlists", "pl": "Pokaż wszystkie playlisty",
+            "zh-Hans": "查看全部播放列表",
+        ],
+        "amSearchPrompt": [
+            "en": "Type a song, album, artist, or playlist to search the catalog.",
+            "de": "Geben Sie einen Titel, ein Album, einen Interpreten oder eine Playlist ein, um den Katalog zu durchsuchen.",
+            "fr": "Saisissez un morceau, un album, un artiste ou une playlist pour rechercher dans le catalogue.",
+            "nl": "Typ een nummer, album, artiest of afspeellijst om de catalogus te doorzoeken.",
+            "es": "Escribe una canción, álbum, artista o lista para buscar en el catálogo.",
+            "it": "Digita un brano, un album, un artista o una playlist per cercare nel catalogo.",
+            "sv": "Skriv en låt, ett album, en artist eller en spellista för att söka i katalogen.",
+            "nb": "Skriv inn en sang, et album, en artist eller en spilleliste for å søke i katalogen.",
+            "da": "Skriv en sang, et album, en kunstner eller en afspilningsliste for at søge i kataloget.",
+            "ja": "曲、アルバム、アーティスト、プレイリストを入力してカタログを検索します。",
+            "pt": "Digite uma música, álbum, artista ou playlist para buscar no catálogo.",
+            "pl": "Wpisz utwór, album, wykonawcę lub playlistę, aby przeszukać katalog.",
+            "zh-Hans": "输入歌曲、专辑、艺人或播放列表以搜索目录。",
+        ],
+        "amSearchCatalogPrompt": [
+            "en": "Type a song, album, or artist to search the Apple Music catalog.",
+            "de": "Geben Sie einen Titel, ein Album oder einen Interpreten ein, um den Apple Music-Katalog zu durchsuchen.",
+            "fr": "Saisissez un morceau, un album ou un artiste pour rechercher dans le catalogue Apple Music.",
+            "nl": "Typ een nummer, album of artiest om de Apple Music-catalogus te doorzoeken.",
+            "es": "Escribe una canción, álbum o artista para buscar en el catálogo de Apple Music.",
+            "it": "Digita un brano, un album o un artista per cercare nel catalogo Apple Music.",
+            "sv": "Skriv en låt, ett album eller en artist för att söka i Apple Music-katalogen.",
+            "nb": "Skriv inn en sang, et album eller en artist for å søke i Apple Music-katalogen.",
+            "da": "Skriv en sang, et album eller en kunstner for at søge i Apple Music-kataloget.",
+            "ja": "曲、アルバム、アーティストを入力してApple Musicのカタログを検索します。",
+            "pt": "Digite uma música, álbum ou artista para buscar no catálogo do Apple Music.",
+            "pl": "Wpisz utwór, album lub wykonawcę, aby przeszukać katalog Apple Music.",
+            "zh-Hans": "输入歌曲、专辑或艺人以搜索 Apple Music 目录。",
+        ],
+        "amNoResults": [
+            "en": "No results", "de": "Keine Ergebnisse", "fr": "Aucun résultat", "nl": "Geen resultaten",
+            "es": "Sin resultados", "it": "Nessun risultato", "sv": "Inga resultat", "nb": "Ingen resultater",
+            "da": "Ingen resultater", "ja": "結果がありません", "pt": "Nenhum resultado", "pl": "Brak wyników",
+            "zh-Hans": "没有结果",
+        ],
+        "amTryDifferentQuery": [
+            "en": "Try a different query.", "de": "Versuchen Sie eine andere Suche.", "fr": "Essayez une autre recherche.", "nl": "Probeer een andere zoekopdracht.",
+            "es": "Prueba otra búsqueda.", "it": "Prova una ricerca diversa.", "sv": "Prova en annan sökning.", "nb": "Prøv et annet søk.",
+            "da": "Prøv en anden søgning.", "ja": "別のキーワードをお試しください。", "pt": "Tente outra busca.", "pl": "Spróbuj innego zapytania.",
+            "zh-Hans": "请尝试其他搜索词。",
+        ],
+        "amNoTracksMatched": [
+            "en": "No tracks matched.", "de": "Keine Titel gefunden.", "fr": "Aucune piste correspondante.", "nl": "Geen nummers gevonden.",
+            "es": "Ninguna pista coincide.", "it": "Nessun brano corrispondente.", "sv": "Inga låtar matchade.", "nb": "Ingen spor samsvarte.",
+            "da": "Ingen numre matchede.", "ja": "一致する曲がありません。", "pt": "Nenhuma faixa correspondente.", "pl": "Brak pasujących utworów.",
+            "zh-Hans": "没有匹配的曲目。",
+        ],
+        "amNoAlbums": [
+            "en": "No albums", "de": "Keine Alben", "fr": "Aucun album", "nl": "Geen albums",
+            "es": "Sin álbumes", "it": "Nessun album", "sv": "Inga album", "nb": "Ingen album",
+            "da": "Ingen album", "ja": "アルバムがありません", "pt": "Nenhum álbum", "pl": "Brak albumów",
+            "zh-Hans": "没有专辑",
+        ],
+        "amNoAlbumsMatched": [
+            "en": "No albums matched.", "de": "Keine Alben gefunden.", "fr": "Aucun album correspondant.", "nl": "Geen albums gevonden.",
+            "es": "Ningún álbum coincide.", "it": "Nessun album corrispondente.", "sv": "Inga album matchade.", "nb": "Ingen album samsvarte.",
+            "da": "Ingen album matchede.", "ja": "一致するアルバムがありません。", "pt": "Nenhum álbum correspondente.", "pl": "Brak pasujących albumów.",
+            "zh-Hans": "没有匹配的专辑。",
+        ],
+        "amNoArtists": [
+            "en": "No artists", "de": "Keine Interpreten", "fr": "Aucun artiste", "nl": "Geen artiesten",
+            "es": "Sin artistas", "it": "Nessun artista", "sv": "Inga artister", "nb": "Ingen artister",
+            "da": "Ingen kunstnere", "ja": "アーティストがいません", "pt": "Nenhum artista", "pl": "Brak wykonawców",
+            "zh-Hans": "没有艺人",
+        ],
+        "amNoArtistsMatched": [
+            "en": "No artists matched.", "de": "Keine Interpreten gefunden.", "fr": "Aucun artiste correspondant.", "nl": "Geen artiesten gevonden.",
+            "es": "Ningún artista coincide.", "it": "Nessun artista corrispondente.", "sv": "Inga artister matchade.", "nb": "Ingen artister samsvarte.",
+            "da": "Ingen kunstnere matchede.", "ja": "一致するアーティストがいません。", "pt": "Nenhum artista correspondente.", "pl": "Brak pasujących wykonawców.",
+            "zh-Hans": "没有匹配的艺人。",
+        ],
+        "amNoPlaylists": [
+            "en": "No playlists", "de": "Keine Playlists", "fr": "Aucune playlist", "nl": "Geen afspeellijsten",
+            "es": "Sin listas", "it": "Nessuna playlist", "sv": "Inga spellistor", "nb": "Ingen spillelister",
+            "da": "Ingen afspilningslister", "ja": "プレイリストがありません", "pt": "Nenhuma playlist", "pl": "Brak playlist",
+            "zh-Hans": "没有播放列表",
+        ],
+        "amNoPlaylistsMatched": [
+            "en": "No playlists matched.", "de": "Keine Playlists gefunden.", "fr": "Aucune playlist correspondante.", "nl": "Geen afspeellijsten gevonden.",
+            "es": "Ninguna lista coincide.", "it": "Nessuna playlist corrispondente.", "sv": "Inga spellistor matchade.", "nb": "Ingen spillelister samsvarte.",
+            "da": "Ingen afspilningslister matchede.", "ja": "一致するプレイリストがありません。", "pt": "Nenhuma playlist correspondente.", "pl": "Brak pasujących playlist.",
+            "zh-Hans": "没有匹配的播放列表。",
+        ],
+        "amAccessDeniedTitle": [
+            "en": "Apple Music access denied", "de": "Apple Music-Zugriff verweigert", "fr": "Accès à Apple Music refusé", "nl": "Apple Music-toegang geweigerd",
+            "es": "Acceso a Apple Music denegado", "it": "Accesso ad Apple Music negato", "sv": "Apple Music-åtkomst nekad", "nb": "Apple Music-tilgang avvist",
+            "da": "Adgang til Apple Music nægtet", "ja": "Apple Musicへのアクセスが拒否されました", "pt": "Acesso ao Apple Music negado", "pl": "Odmowa dostępu do Apple Music",
+            "zh-Hans": "Apple Music 访问被拒绝",
+        ],
+        "amSubscriptionRequiredTitle": [
+            "en": "Apple Music subscription required", "de": "Apple Music-Abonnement erforderlich", "fr": "Abonnement Apple Music requis", "nl": "Apple Music-abonnement vereist",
+            "es": "Se requiere una suscripción a Apple Music", "it": "Abbonamento Apple Music richiesto", "sv": "Apple Music-abonnemang krävs", "nb": "Apple Music-abonnement kreves",
+            "da": "Apple Music-abonnement kræves", "ja": "Apple Musicの登録が必要です", "pt": "Assinatura do Apple Music necessária", "pl": "Wymagana subskrypcja Apple Music",
+            "zh-Hans": "需要 Apple Music 订阅",
+        ],
+        "amNotAvailableTitle": [
+            "en": "Apple Music is not available in this build", "de": "Apple Music ist in dieser Version nicht verfügbar", "fr": "Apple Music n’est pas disponible dans cette version", "nl": "Apple Music is niet beschikbaar in deze build",
+            "es": "Apple Music no está disponible en esta versión", "it": "Apple Music non è disponibile in questa build", "sv": "Apple Music är inte tillgängligt i den här versionen", "nb": "Apple Music er ikke tilgjengelig i denne versjonen",
+            "da": "Apple Music er ikke tilgængelig i denne version", "ja": "このビルドではApple Musicは利用できません", "pt": "O Apple Music não está disponível nesta versão", "pl": "Apple Music nie jest dostępne w tej kompilacji",
+            "zh-Hans": "此版本不支持 Apple Music",
+        ],
+        "amPromptBodyNotDetermined": [
+            "en": "Allow Choragus to read your Apple Music catalog so you can search and browse from inside the app.",
+            "de": "Erlauben Sie Choragus, Ihren Apple Music-Katalog zu lesen, damit Sie direkt in der App suchen und stöbern können.",
+            "fr": "Autorisez Choragus à lire votre catalogue Apple Music afin de rechercher et parcourir depuis l’app.",
+            "nl": "Geef Choragus toegang tot je Apple Music-catalogus zodat je in de app kunt zoeken en bladeren.",
+            "es": "Permite que Choragus lea tu catálogo de Apple Music para buscar y explorar desde la app.",
+            "it": "Consenti a Choragus di leggere il tuo catalogo Apple Music per cercare e sfogliare dall’app.",
+            "sv": "Tillåt Choragus att läsa din Apple Music-katalog så att du kan söka och bläddra i appen.",
+            "nb": "Tillat Choragus å lese Apple Music-katalogen din slik at du kan søke og bla i appen.",
+            "da": "Tillad Choragus at læse dit Apple Music-katalog, så du kan søge og gennemse i appen.",
+            "ja": "ChoragusがあなたのApple Musicカタログを読み取れるようにすると、アプリ内で検索や閲覧ができます。",
+            "pt": "Permita que o Choragus leia seu catálogo do Apple Music para buscar e explorar dentro do app.",
+            "pl": "Zezwól Choragus na odczyt katalogu Apple Music, aby wyszukiwać i przeglądać w aplikacji.",
+            "zh-Hans": "允许 Choragus 读取你的 Apple Music 目录，即可在应用内搜索和浏览。",
+        ],
+        "amPromptBodyDenied": [
+            "en": "Choragus needs Apple Music access to search the catalog. Open System Settings \u{2192} Privacy & Security \u{2192} Media & Apple Music and enable Choragus.",
+            "de": "Choragus benötigt Apple Music-Zugriff, um den Katalog zu durchsuchen. Öffnen Sie Systemeinstellungen \u{2192} Datenschutz & Sicherheit \u{2192} Medien & Apple Music und aktivieren Sie Choragus.",
+            "fr": "Choragus a besoin de l’accès à Apple Music pour rechercher dans le catalogue. Ouvrez Réglages Système \u{2192} Confidentialité et sécurité \u{2192} Médias et Apple Music et activez Choragus.",
+            "nl": "Choragus heeft Apple Music-toegang nodig om de catalogus te doorzoeken. Open Systeeminstellingen \u{2192} Privacy en beveiliging \u{2192} Media en Apple Music en schakel Choragus in.",
+            "es": "Choragus necesita acceso a Apple Music para buscar en el catálogo. Abre Ajustes del Sistema \u{2192} Privacidad y seguridad \u{2192} Contenido y Apple Music y activa Choragus.",
+            "it": "Choragus ha bisogno dell’accesso ad Apple Music per cercare nel catalogo. Apri Impostazioni di Sistema \u{2192} Privacy e sicurezza \u{2192} Contenuti multimediali e Apple Music e attiva Choragus.",
+            "sv": "Choragus behöver Apple Music-åtkomst för att söka i katalogen. Öppna Systeminställningar \u{2192} Integritet och säkerhet \u{2192} Media och Apple Music och aktivera Choragus.",
+            "nb": "Choragus trenger Apple Music-tilgang for å søke i katalogen. Åpne Systeminnstillinger \u{2192} Personvern og sikkerhet \u{2192} Medier og Apple Music og slå på Choragus.",
+            "da": "Choragus skal bruge Apple Music-adgang for at søge i kataloget. Åbn Systemindstillinger \u{2192} Anonymitet og sikkerhed \u{2192} Medier og Apple Music, og aktivér Choragus.",
+            "ja": "カタログを検索するにはChoragusにApple Musicへのアクセスが必要です。システム設定 \u{2192} プライバシーとセキュリティ \u{2192} メディアとApple Musicを開き、Choragusを有効にしてください。",
+            "pt": "O Choragus precisa de acesso ao Apple Music para buscar no catálogo. Abra Ajustes do Sistema \u{2192} Privacidade e Segurança \u{2192} Mídia e Apple Music e ative o Choragus.",
+            "pl": "Choragus potrzebuje dostępu do Apple Music, aby przeszukać katalog. Otwórz Ustawienia systemowe \u{2192} Prywatność i bezpieczeństwo \u{2192} Multimedia i Apple Music i włącz Choragus.",
+            "zh-Hans": "Choragus 需要 Apple Music 访问权限才能搜索目录。打开系统设置 \u{2192} 隐私与安全性 \u{2192} 媒体与 Apple Music，并启用 Choragus。",
+        ],
+        "amPromptBodyNoSubscription": [
+            "en": "Apple Music search needs an active subscription on the Apple ID you're signed in with on this Mac.",
+            "de": "Die Apple Music-Suche erfordert ein aktives Abonnement für die Apple-ID, mit der Sie auf diesem Mac angemeldet sind.",
+            "fr": "La recherche Apple Music nécessite un abonnement actif sur l’identifiant Apple connecté sur ce Mac.",
+            "nl": "Apple Music-zoeken vereist een actief abonnement op de Apple ID waarmee je op deze Mac bent ingelogd.",
+            "es": "La búsqueda en Apple Music necesita una suscripción activa en el ID de Apple con el que iniciaste sesión en este Mac.",
+            "it": "La ricerca su Apple Music richiede un abbonamento attivo sull’ID Apple con cui hai eseguito l’accesso su questo Mac.",
+            "sv": "Sökning i Apple Music kräver ett aktivt abonnemang på det Apple-ID du är inloggad med på den här Macen.",
+            "nb": "Apple Music-søk krever et aktivt abonnement på Apple-ID-en du er logget på med på denne Macen.",
+            "da": "Søgning i Apple Music kræver et aktivt abonnement på det Apple-id, du er logget ind med på denne Mac.",
+            "ja": "Apple Musicの検索には、このMacでサインインしているApple IDでの有効な登録が必要です。",
+            "pt": "A busca no Apple Music precisa de uma assinatura ativa no ID Apple com que você fez login neste Mac.",
+            "pl": "Wyszukiwanie w Apple Music wymaga aktywnej subskrypcji na Apple ID, na którym zalogowano się na tym Macu.",
+            "zh-Hans": "Apple Music 搜索需要你在此 Mac 上登录的 Apple ID 拥有有效订阅。",
+        ],
+        "amPromptBodyNotApplicable": [
+            "en": "This build doesn't include MusicKit support. Use the legacy Apple Music entry under Music Services to search via Sonos.",
+            "de": "Diese Version enthält keine MusicKit-Unterstützung. Verwenden Sie den älteren Apple Music-Eintrag unter Musikdienste, um über Sonos zu suchen.",
+            "fr": "Cette version n’inclut pas la prise en charge de MusicKit. Utilisez l’entrée Apple Music classique sous Services musicaux pour rechercher via Sonos.",
+            "nl": "Deze build bevat geen MusicKit-ondersteuning. Gebruik de oudere Apple Music-vermelding onder Muziekdiensten om via Sonos te zoeken.",
+            "es": "Esta versión no incluye compatibilidad con MusicKit. Usa la entrada clásica de Apple Music en Servicios de música para buscar a través de Sonos.",
+            "it": "Questa build non include il supporto per MusicKit. Usa la voce Apple Music classica in Servizi musicali per cercare tramite Sonos.",
+            "sv": "Den här versionen saknar stöd för MusicKit. Använd den äldre Apple Music-posten under Musiktjänster för att söka via Sonos.",
+            "nb": "Denne versjonen inkluderer ikke MusicKit-støtte. Bruk den eldre Apple Music-oppføringen under Musikktjenester for å søke via Sonos.",
+            "da": "Denne version indeholder ikke MusicKit-understøttelse. Brug den ældre Apple Music-post under Musiktjenester for at søge via Sonos.",
+            "ja": "このビルドはMusicKitに対応していません。Sonos経由で検索するには、音楽サービスの従来のApple Music項目をご利用ください。",
+            "pt": "Esta versão não inclui suporte ao MusicKit. Use a entrada antiga do Apple Music em Serviços de Música para buscar via Sonos.",
+            "pl": "Ta kompilacja nie obsługuje MusicKit. Użyj starszej pozycji Apple Music w Usługach muzycznych, aby wyszukiwać przez Sonos.",
+            "zh-Hans": "此版本不包含 MusicKit 支持。请使用音乐服务中的旧版 Apple Music 条目通过 Sonos 搜索。",
+        ],
 
         // ========================
         // MARK: General
@@ -1801,6 +2796,31 @@ public enum L10n {
             "pt": "Reproduzir em seguida",
             "pl": "Odtw\u{00F3}rz nast\u{0119}pnie",
             "zh-Hans": "\u{63A5}\u{4E0B}\u{6765}\u{64AD}\u{653E}",
+        ],
+        "playTopSongs": [
+            "en": "Play Top Songs", "de": "Top-Titel abspielen", "fr": "Lire les meilleurs titres",
+            "nl": "Topnummers afspelen", "es": "Reproducir canciones populares", "it": "Riproduci brani principali",
+            "sv": "Spela topplåtar", "nb": "Spill toppsanger", "da": "Afspil topsange",
+            "ja": "トップ曲を再生", "pt": "Reproduzir as principais músicas",
+            "pl": "Odtwórz najlepsze utwory", "zh-Hans": "播放热门歌曲",
+        ],
+        "queueTopSongsNext": [
+            "en": "Queue Top Songs Next", "de": "Top-Titel als Nächstes einreihen",
+            "fr": "Mettre les meilleurs titres en file ensuite", "nl": "Topnummers hierna in wachtrij",
+            "es": "Poner canciones populares a continuación", "it": "Metti in coda i brani principali come successivi",
+            "sv": "Köa topplåtar härnäst", "nb": "Sett toppsanger i kø som neste",
+            "da": "Sæt topsange i kø som de næste", "ja": "トップ曲を次にキュー",
+            "pt": "Adicionar as principais músicas a seguir", "pl": "Kolejkuj najlepsze utwory jako następne",
+            "zh-Hans": "将热门歌曲排在下一首",
+        ],
+        "addTopSongsToQueue": [
+            "en": "Add Top Songs to Queue", "de": "Top-Titel zur Warteschlange hinzufügen",
+            "fr": "Ajouter les meilleurs titres à la file", "nl": "Topnummers aan wachtrij toevoegen",
+            "es": "Añadir canciones populares a la cola", "it": "Aggiungi i brani principali alla coda",
+            "sv": "Lägg till topplåtar i kön", "nb": "Legg toppsanger til i køen",
+            "da": "Tilføj topsange til køen", "ja": "トップ曲をキューに追加",
+            "pt": "Adicionar as principais músicas à fila", "pl": "Dodaj najlepsze utwory do kolejki",
+            "zh-Hans": "将热门歌曲添加到队列",
         ],
         "addToQueue": [
             "en": "Add to Queue",
@@ -5447,6 +6467,21 @@ public enum L10n {
             "pl": "Tworzenie podsumowa\u{0144}\u{2026}",
             "zh-Hans": "\u{6B63}\u{5728}\u{6784}\u{5EFA}\u{6458}\u{8981}\u{2026}",
         ],
+        "intervalLabel": [
+            "en": "Interval", "de": "Intervall", "fr": "Intervalle", "nl": "Interval",
+            "es": "Intervalo", "it": "Intervallo", "sv": "Intervall", "nb": "Intervall",
+            "da": "Interval", "ja": "間隔", "pt": "Intervalo", "pl": "Interwał",
+            "zh-Hans": "间隔",
+        ],
+        "historyStatsFormat": [
+            "en": "%d entries, %.1f hours", "de": "%d Einträge, %.1f Stunden",
+            "fr": "%d entrées, %.1f heures", "nl": "%d vermeldingen, %.1f uur",
+            "es": "%d entradas, %.1f horas", "it": "%d voci, %.1f ore",
+            "sv": "%d poster, %.1f timmar", "nb": "%d oppføringer, %.1f timer",
+            "da": "%d poster, %.1f timer", "ja": "%d 件、%.1f 時間",
+            "pt": "%d entradas, %.1f horas", "pl": "%d wpisów, %.1f godz.",
+            "zh-Hans": "%d 条记录，%.1f 小时",
+        ],
         "manualOnly": [
             "en": "Manual only", "de": "Nur manuell",
             "fr": "Manuel uniquement", "nl": "Alleen handmatig",
@@ -8605,6 +9640,12 @@ public enum L10n {
             "pt": "Acesso \u{00E0} Rede Local necess\u{00E1}rio",
             "pl": "Wymagany dost\u{0119}p do sieci lokalnej",
             "zh-Hans": "\u{9700}\u{8981}\u{672C}\u{5730}\u{7F51}\u{7EDC}\u{8BBF}\u{95EE}\u{6743}\u{9650}",
+        ],
+        "reCheck": [
+            "en": "Re-check", "de": "Erneut prüfen", "fr": "Revérifier", "nl": "Opnieuw controleren",
+            "es": "Volver a comprobar", "it": "Ricontrolla", "sv": "Kontrollera igen",
+            "nb": "Sjekk på nytt", "da": "Tjek igen", "ja": "再確認",
+            "pt": "Verificar novamente", "pl": "Sprawdź ponownie", "zh-Hans": "重新检查",
         ],
         "openSystemSettings": [
             "en": "Open System Settings",

@@ -268,7 +268,11 @@ struct ClubVisWindow: View {
     }
 
     private var nowPlayingArtURL: URL? {
-        artCoordinator.resolver(for: groupID).displayedArtURL
+        // Use the same canonical accessor as Now Playing — it prefers the
+        // resolved per-song cover (`radioTrackArtURL`) over the station logo
+        // for radio. Reading raw `displayedArtURL` left the hero stuck on the
+        // station art after the song's art resolved.
+        artCoordinator.resolver(for: groupID).artURLForDisplay(trackMetadata: trackMetadata)
     }
 
     /// True when the current playback is a radio stream — used to
@@ -288,6 +292,14 @@ struct ClubVisWindow: View {
     /// gap instead of flashing the station logo.
     private var settledTrackKey: String {
         if trackMetadata.isAdBreak { return "unsettled" }
+        // Direct-URL service tracks (Suno / TIDAL) carry a deterministic cover
+        // keyed on the URI even when the speaker reports no artist. Settle on
+        // the URI so the hero adopts that art instead of holding "unsettled"
+        // forever (the artist gate below would otherwise never pass).
+        if let uri = trackMetadata.trackURI,
+           SunoCatalog.uuid(fromURI: uri) != nil || TidalCatalog.key(fromURI: uri) != nil {
+            return "svc:\(uri)"
+        }
         guard !trackMetadata.title.isEmpty,
               !trackMetadata.artist.isEmpty else { return "unsettled" }
         if !trackMetadata.stationName.isEmpty,
@@ -408,8 +420,20 @@ struct ClubVisWindow: View {
                     maxArtists: 5,
                     priorityArtists: priority)
             }
+            let sunoUUID = trackMetadata.trackURI.flatMap { SunoCatalog.uuid(fromURI: $0) }
             let artist = trackMetadata.artist
-            if !artist.isEmpty {
+            if let uuid = sunoUUID {
+                // Suno tracks: creator profile (avatar/bio/style tags) instead
+                // of the Last.fm lookup, which has no AI creators.
+                let guardURI = trackMetadata.trackURI
+                visLog("about — Suno creator profile fetch START")
+                Task { @MainActor in
+                    let info = await SunoResolver.artistProfile(forUUID: uuid)
+                    guard trackMetadata.trackURI == guardURI else { return }
+                    nowPlayingArtistInfo = info
+                    nowPlayingSimilarArtists = []
+                }
+            } else if !artist.isEmpty {
                 let fetchStart = Date()
                 visLog("about — artistInfo fetch START artist=\(artist)")
                 Task { @MainActor in
@@ -1055,9 +1079,22 @@ struct ClubVisWindow: View {
         let mode = VisGenreMatchMode.current
 
         func usableArt(_ raw: String?, sourceURI: String?) -> URL? {
-            guard let raw, !raw.isEmpty,
-                  let url = URL(string: raw) else { return nil }
             if let s = sourceURI, URIPrefix.isRadio(s) { return nil }
+            // Direct-URL service tracks (Suno, TIDAL) play with stripped DIDL,
+            // so the history entry's stored art is blank/`getaa`. Recover the
+            // real cover from the same catalogs the queue / now-playing use:
+            // Suno derives it from the clip UUID, TIDAL from the persisted
+            // browse art keyed on the play URL.
+            var effective = raw
+            if let s = sourceURI {
+                if let uuid = SunoCatalog.uuid(fromURI: s) {
+                    effective = SunoCatalog.coverURL(forUUID: uuid)
+                } else if let art = TidalCatalog.art(forURI: s) {
+                    effective = art
+                }
+            }
+            guard let effective, !effective.isEmpty,
+                  let url = URL(string: effective) else { return nil }
             // No cache gate — pool now includes any valid art URL,
             // and `downloadMissingPoolArt()` (post-rebuildTiles)
             // backfills `preloaded` for anything not yet cached.

@@ -136,9 +136,47 @@ public final class SMAPIClient {
         )
     }
 
-    /// Polls for auth completion. `linkDeviceId` must be the value the
-    /// service returned from `getAppLink`; fall back to the speaker's
-    /// `deviceID` for services (like Spotify) that don't mint their own.
+    /// Result of a getDeviceLinkCode call (DeviceLink-policy services, e.g.
+    /// TIDAL). The user opens `regUrl` in a browser and authorizes; the
+    /// `linkCode` is then polled via `getDeviceAuthToken`. DeviceLink
+    /// services don't mint a session `linkDeviceId`, so the speaker's
+    /// device id is echoed back during polling (same as Spotify's AppLink).
+    public func getDeviceLinkCode(serviceURI: String, householdID: String, deviceID: String) async throws -> AppLinkResult {
+        let body = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+         xmlns:s="http://www.sonos.com/Services/1.1">
+        <soap:Header>
+        <s:credentials>
+        <s:deviceId>\(deviceID)</s:deviceId>
+        <s:deviceProvider>Sonos</s:deviceProvider>
+        </s:credentials>
+        </soap:Header>
+        <soap:Body>
+        <s:getDeviceLinkCode>
+        <s:householdId>\(householdID)</s:householdId>
+        </s:getDeviceLinkCode>
+        </soap:Body></soap:Envelope>
+        """
+        let result = try await soapCall(
+            url: serviceURI,
+            action: "http://www.sonos.com/Services/1.1#getDeviceLinkCode",
+            body: body
+        )
+        return AppLinkResult(
+            regUrl: extractValue(from: result, tag: "regUrl") ?? "",
+            linkCode: extractValue(from: result, tag: "linkCode") ?? "",
+            linkDeviceId: extractValue(from: result, tag: "linkDeviceId")
+        )
+    }
+
+    /// Polls for auth completion. `linkDeviceId` is echoed back ONLY when the
+    /// service minted one during getAppLink/getDeviceLinkCode (e.g. Plex). The
+    /// element is omitted otherwise: TIDAL's getDeviceAuthToken faults
+    /// `Client.NOT_LINKED_FAILURE` when a linkDeviceId it didn't issue is
+    /// present, and Spotify ignores the field, so dropping the old
+    /// speaker-`deviceID` fallback is spec-correct and unblocks DeviceLink
+    /// services without regressing AppLink ones.
     public func getDeviceAuthToken(
         serviceURI: String,
         householdID: String,
@@ -146,7 +184,12 @@ public final class SMAPIClient {
         linkCode: String,
         linkDeviceId: String? = nil
     ) async throws -> (authToken: String, privateKey: String)? {
-        let effectiveLinkDeviceId = linkDeviceId ?? deviceID
+        let linkDeviceElement: String
+        if let id = linkDeviceId, !id.isEmpty {
+            linkDeviceElement = "<s:linkDeviceId>\(id)</s:linkDeviceId>"
+        } else {
+            linkDeviceElement = ""
+        }
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
@@ -161,7 +204,7 @@ public final class SMAPIClient {
         <s:getDeviceAuthToken>
         <s:householdId>\(householdID)</s:householdId>
         <s:linkCode>\(linkCode)</s:linkCode>
-        <s:linkDeviceId>\(effectiveLinkDeviceId)</s:linkDeviceId>
+        \(linkDeviceElement)
         </s:getDeviceAuthToken>
         </soap:Body></soap:Envelope>
         """

@@ -47,7 +47,7 @@ struct AppleMusicAlbumDetailView: View {
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if tracks.isEmpty {
-                ContentUnavailableView("No tracks", systemImage: "music.note.list")
+                ContentUnavailableView(L10n.amNoTracks, systemImage: "music.note.list")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
@@ -92,24 +92,24 @@ struct AppleMusicArtistDetailView: View {
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if topSongs.isEmpty && albums.isEmpty {
-                ContentUnavailableView("Nothing to show", systemImage: "music.mic")
+                ContentUnavailableView(L10n.amNothingToShow, systemImage: "music.mic")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         if !topSongs.isEmpty {
                             drilldownRow(
-                                title: "Top Songs", icon: "music.note",
+                                title: L10n.amTopSongs, icon: "music.note",
                                 count: topSongs.count,
                                 preview: topSongs.first?.artworkURL,
-                                destination: .trackList(title: "Top Songs", tracks: topSongs)
+                                destination: .trackList(title: L10n.amTopSongs, tracks: topSongs)
                             )
                         }
                         if !albums.isEmpty {
                             drilldownRow(
-                                title: "Albums", icon: "square.stack",
+                                title: L10n.amAlbums, icon: "square.stack",
                                 count: albums.count,
                                 preview: albums.first?.artworkURL,
-                                destination: .albumList(title: "Albums", albums: albums)
+                                destination: .albumList(title: L10n.amAlbums, albums: albums)
                             )
                         }
                     }
@@ -141,7 +141,7 @@ struct AppleMusicArtistDetailView: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.body).foregroundStyle(.primary)
-                    Text("^[\(count) item](inflect: true)")
+                    Text(L10n.amItemsCount(count))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -175,7 +175,7 @@ struct AppleMusicPlaylistDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             detailHeader(title: name, subtitle: curator, artwork: artworkURL,
-                         circular: false, badge: "Playlist")
+                         circular: false, badge: L10n.amPlaylistBadge)
             Divider()
             HStack {
                 AppleMusicBulkActionBar(tracks: sortedTracks, helper: helper)
@@ -187,7 +187,7 @@ struct AppleMusicPlaylistDetailView: View {
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if tracks.isEmpty {
-                ContentUnavailableView("Empty playlist", systemImage: "music.note.list")
+                ContentUnavailableView(L10n.amEmptyPlaylist, systemImage: "music.note.list")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
@@ -518,7 +518,7 @@ struct AppleMusicGenreListView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Filter genres", text: $query)
+                TextField(L10n.amFilterGenres, text: $query)
                     .textFieldStyle(.plain)
                 Spacer()
                 AppleMusicSortPicker(selection: $sort).padding(.trailing, 12)
@@ -568,19 +568,19 @@ struct AppleMusicGenreChartsView: View {
             if loading {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if browse == .empty {
-                ContentUnavailableView("No charts for this genre", systemImage: "guitars")
+                ContentUnavailableView(L10n.amNoChartsForGenre, systemImage: "guitars")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 4) {
                         if !browse.topSongs.isEmpty {
-                            sectionHeader("Top Songs")
+                            sectionHeader(L10n.amTopSongs)
                             AppleMusicBulkActionBar(tracks: browse.topSongs, helper: helper)
                             ForEach(browse.topSongs) { track in
                                 AppleMusicTrackRow(track: track, helper: helper)
                             }
                         }
                         if !browse.topAlbums.isEmpty {
-                            sectionHeader("Top Albums")
+                            sectionHeader(L10n.amTopAlbums)
                             ForEach(browse.topAlbums) { album in
                                 Button {
                                     onNavigate(.album(id: album.id, title: album.title, artist: album.artist, artworkURL: album.artworkURL))
@@ -603,7 +603,7 @@ struct AppleMusicGenreChartsView: View {
                             }
                         }
                         if !browse.topPlaylists.isEmpty {
-                            sectionHeader("Top Playlists")
+                            sectionHeader(L10n.amTopPlaylists)
                             ForEach(browse.topPlaylists) { playlist in
                                 Button {
                                     onNavigate(.playlist(id: playlist.id, name: playlist.name,
@@ -658,7 +658,7 @@ struct AppleMusicStationSearchView: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search stations (artist, genre, mood)", text: $query)
+                TextField(L10n.amSearchStationsPlaceholder, text: $query)
                     .textFieldStyle(.plain)
                     .onChange(of: query) { _, newValue in scheduleSearch(newValue) }
                 AppleMusicSortPicker(selection: $sort)
@@ -670,10 +670,10 @@ struct AppleMusicStationSearchView: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if stations.isEmpty {
                 ContentUnavailableView(
-                    query.isEmpty ? "Search Apple Music stations" : "No stations found",
+                    query.isEmpty ? L10n.amSearchAppleMusicStations : L10n.amNoStationsFound,
                     systemImage: "antenna.radiowaves.left.and.right",
                     description: query.isEmpty
-                        ? Text("Try \"jazz\", \"pop\", \"rock\", \"chill\" or an artist name.")
+                        ? Text(L10n.amSearchHint)
                         : nil
                 )
             } else {
@@ -799,15 +799,15 @@ struct AppleMusicRecommendationDetailView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
                 if !stations.isEmpty {
-                    sectionHeader("Stations")
+                    sectionHeader(L10n.amStations)
                     ForEach(stations) { station in stationRow(station) }
                 }
                 if !albums.isEmpty {
-                    sectionHeader("Albums")
+                    sectionHeader(L10n.amAlbums)
                     ForEach(albums) { album in albumNavRow(album) }
                 }
                 if !playlists.isEmpty {
-                    sectionHeader("Playlists")
+                    sectionHeader(L10n.amPlaylists)
                     ForEach(playlists) { p in playlistNavRow(p) }
                 }
             }

@@ -75,6 +75,10 @@ public protocol AlbumArtSearchProtocol {
     /// completing in 5–10 minutes beats dropping 80 % of them.
     /// Hard `.cooldown` still fails fast.
     func searchArtwork(artist: String, album: String, maxWait: TimeInterval) async -> String?
+
+    /// Direct iTunes `lookup?id=` for Apple Music / iTunes catalog IDs.
+    /// Authoritative for the exact track — no title-matching guesswork.
+    func lookupArtworkByCatalogID(_ id: String) async -> String?
 }
 
 public extension AlbumArtSearchProtocol {

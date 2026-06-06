@@ -284,6 +284,34 @@ public final class AlbumArtSearchService: AlbumArtSearchProtocol {
         return nil
     }
 
+    /// Direct iTunes `lookup?id=` for a known catalog song ID. Skips the
+    /// title-matching strategies — the ID is authoritative.
+    public func lookupArtworkByCatalogID(_ id: String) async -> String? {
+        let trimmed = id.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed.allSatisfy({ $0.isNumber }) else { return nil }
+        let cacheKey = "catalog:\(trimmed)"
+        cacheLock.lock()
+        if let cached = cache[cacheKey] { cacheLock.unlock(); return cached }
+        cacheLock.unlock()
+
+        guard let url = URL(string: "https://itunes.apple.com/lookup?id=\(trimmed)") else { return nil }
+        guard let (data, _) = await ITunesRateLimiter.shared.perform(
+            url: url, session: session, maxWait: 5
+        ) else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]],
+              let first = results.first,
+              let art = first["artworkUrl100"] as? String else {
+            cacheSet(cacheKey, nil)
+            return nil
+        }
+        let upscaled = art.replacingOccurrences(of: "100x100", with: "600x600")
+                          .replacingOccurrences(of: "60x60", with: "600x600")
+                          .replacingOccurrences(of: "30x30", with: "600x600")
+        cacheSet(cacheKey, upscaled)
+        return upscaled
+    }
+
     // MARK: - Shared Utilities
 
     /// Soundtrack-track suffix keywords — appear at the END of titles like

@@ -505,6 +505,11 @@ public protocol AppleMusicProvider: AnyObject, Sendable {
     /// "Now in Spatial Audio" list, so we filter the top-charts feed
     /// by `audioVariants`.
     func spatialAudioAlbums(limit: Int) async -> [AppleMusicAlbum]
+
+    /// Creates a new library playlist with the given name, populated with the
+    /// supplied catalog song IDs (order preserved). Returns true on success.
+    /// Used by "Save queue to Apple Music".
+    func createLibraryPlaylist(name: String, catalogSongIDs: [String]) async -> Bool
 }
 
 /// Default implementation used by every build profile that does NOT
@@ -540,6 +545,7 @@ public final class DisabledAppleMusicProvider: AppleMusicProvider, @unchecked Se
     public func searchStations(query: String, limit: Int) async -> [AppleMusicStation] { [] }
     public func userStations(limit: Int) async -> [AppleMusicStation] { [] }
     public func spatialAudioAlbums(limit: Int) async -> [AppleMusicAlbum] { [] }
+    public func createLibraryPlaylist(name: String, catalogSongIDs: [String]) async -> Bool { false }
 }
 
 /// Live provider selection. Always returns a usable instance — a

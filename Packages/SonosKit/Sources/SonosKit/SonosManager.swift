@@ -10,6 +10,7 @@
 /// instantly on launch while live discovery runs in the background.
 import Foundation
 import Combine
+import Network
 
 private let debugLogPath: String = {
     AppPaths.appSupportDirectory.appendingPathComponent("sonos_debug.log").path
@@ -469,9 +470,13 @@ public class SonosManager: ObservableObject {
     }()
 
     /// Codable payload for the Apple-Music-by-track-ID enrichment cache.
+    /// `title` and `artURL` are optional for backward compat with pre-v4.10.1
+    /// cached entries that lacked those fields.
     fileprivate struct AppleMusicTrackEnrichment: Codable, Sendable {
         let artist: String
         let album: String?
+        let title: String?
+        let artURL: String?
     }
 
     /// Cached track info — populated when adding Service Search items to queue.
@@ -497,6 +502,19 @@ public class SonosManager: ObservableObject {
 
     private var transportStrategy: TransportStrategy?
     private var strategyStarted = false
+
+    // MARK: - Network Path Monitor
+    //
+    // UPnP `SUBSCRIBE` registers a CALLBACK header — our local
+    // `EventListener`'s URL — with each speaker. A network path change
+    // (VPN toggle, Wi-Fi roam to a different SSID, Ethernet plug/unplug)
+    // can invalidate that callback URL because the host's reachable IP
+    // shifts. SOAP control still works (we initiate those connections),
+    // but events stop arriving. Rebind subscriptions on path change.
+    private var transportPathMonitor: NWPathMonitor?
+    private let transportPathQueue = DispatchQueue(label: "com.choragus.sonos.transport-path")
+    private var lastTransportPathSignature: String = ""
+    private var pendingTransportRestart: Task<Void, Never>?
 
     // Debug logging is in the sonosDebugLog free function below
 
@@ -596,6 +614,7 @@ public class SonosManager: ObservableObject {
         self.inactiveZoneColor = StoredColor.load(from: "inactiveZoneColor", default: StoredColor(red: 0.56, green: 0.56, blue: 0.58))
 
         rebuildDiscoveryTransports()
+        startTransportPathMonitor()
 
         // Forward art cache changes so views observing `sonosManager` re-render
         // when the cache updates (preserves the prior `@Published` semantics
@@ -702,6 +721,40 @@ public class SonosManager: ObservableObject {
                 self.isRefreshing = false
             }
         }
+    }
+
+    /// Watches for network path changes and rebinds UPnP event
+    /// subscriptions when the path signature shifts. Signature folds
+    /// status + first-interface-type so a same-class roam (Wi-Fi to
+    /// Wi-Fi at a different SSID) doesn't unnecessarily churn — but a
+    /// real interface-class swap (Wi-Fi ↔ Ethernet, VPN on/off) does.
+    /// 800 ms debounce coalesces the flurry of path updates that fire
+    /// during the actual transition.
+    private func startTransportPathMonitor() {
+        guard transportPathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            let iface = path.availableInterfaces.first.map { String(describing: $0.type) } ?? "none"
+            let sig = "\(path.status)|\(iface)"
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.lastTransportPathSignature.isEmpty {
+                    self.lastTransportPathSignature = sig
+                    return
+                }
+                guard sig != self.lastTransportPathSignature else { return }
+                self.lastTransportPathSignature = sig
+                self.pendingTransportRestart?.cancel()
+                self.pendingTransportRestart = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 800_000_000)
+                    guard !Task.isCancelled, let self else { return }
+                    await self.transportStrategy?.restartForNetworkChange()
+                }
+            }
+        }
+        monitor.start(queue: transportPathQueue)
+        transportPathMonitor = monitor
     }
 
     /// Builds the active transport list from `discoveryMode` and wires the
@@ -968,6 +1021,11 @@ public class SonosManager: ObservableObject {
             // shape — keeps homeTheaterZones consumer pure HT while
             // letting the bug-bundle snapshot fold both bonded forms).
             parseStereoChannelMaps(from: groupData)
+
+            // Check newly-seen devices for a fixed line-out so the UI can
+            // disable their volume slider before the user hits a 501 (#50).
+            // Cheap + idempotent: only un-checked devices are queried.
+            Task { [weak self] in await self?.refreshFixedOutputStatus() }
 
             // Equality-gate the three @Published flag writes — they
             // fire after every topology refresh attempt (which runs
@@ -1275,7 +1333,7 @@ public class SonosManager: ObservableObject {
                 if case .soapFault(let code, _) = error {
                     handleStaleness(for: roomName, kind: code)
                 }
-            case .serviceRejected, .groupChanged:
+            case .serviceRejected, .groupChanged, .serviceUnavailable:
                 break
             }
             throw mapped
@@ -1424,7 +1482,100 @@ public class SonosManager: ObservableObject {
         try await renderingControl.getVolume(device: device)
     }
 
+    /// Device IDs whose line-out volume is Fixed (Connect / Port / Amp locked
+    /// in the Sonos app). `SetVolume` faults UPnP 501 on these (issue #50), so
+    /// the UI disables their slider and `setVolume` no-ops. Populated by
+    /// `refreshFixedOutputStatus` and self-heals from a live 501.
+    @Published public private(set) var fixedOutputDeviceIDs: Set<String> = []
+    private var checkedOutputFixed: Set<String> = []
+
+    /// Normalizes a device id to the bare zone-player RINCON UUID used by
+    /// topology / `group.members`, stripping the UPnP MediaRenderer (`_MR`)
+    /// suffix that RenderingControl events carry — so the fixed-output set keys
+    /// consistently regardless of which id space produced the id.
+    nonisolated static func bareDeviceID(_ id: String) -> String {
+        id.hasSuffix("_MR") ? String(id.dropLast(3)) : id
+    }
+
+    /// True when the device's line-out is fixed and volume can't be changed.
+    public func isOutputFixed(_ deviceID: String) -> Bool {
+        fixedOutputDeviceIDs.contains(Self.bareDeviceID(deviceID))
+    }
+
+    /// Only Connect / Port / Amp expose a fixed line-out (and the
+    /// `GetOutputFixed` action). Other models (One, Play, soundbars) fault UPnP
+    /// 803 "not implemented" — so don't query them.
+    private static func hasLineOut(_ modelName: String) -> Bool {
+        let m = modelName.lowercased()
+        return m.contains("connect") || m.contains("port") || m.contains("amp")
+    }
+
+    /// Device IDs currently acting as a line-in SOURCE — some group is
+    /// streaming their analog input (`x-rincon-stream:RINCON_<id>`). Used to
+    /// badge the speaker list, so a room with an active line-in is obvious even
+    /// when the source speaker itself shows "no music".
+    public var lineInSourceDeviceIDs: Set<String> {
+        let prefix = "x-rincon-stream:"
+        var ids = Set<String>()
+        for md in groupTrackMetadata.values {
+            guard let uri = md.trackURI, uri.hasPrefix(prefix) else { continue }
+            let id = uri.dropFirst(prefix.count).prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+            if !id.isEmpty { ids.insert(String(id)) }
+        }
+        return ids
+    }
+
+    /// Re-checks the fixed-output status of a specific group's members and
+    /// updates `fixedOutputDeviceIDs` BOTH ways. Called when a group is viewed
+    /// and on its track changes — the fixed state isn't static (a Connect is
+    /// fixed while sourcing line-in but adjustable when playing its own track),
+    /// so this must override the one-shot `checkedOutputFixed` cache, removing
+    /// devices that are no longer fixed.
+    public func ensureFixedOutputChecked(for group: SonosGroup) async {
+        for member in group.members {
+            let key = Self.bareDeviceID(member.id)
+            // Topology members can carry an empty modelName, so resolve the full
+            // device record (which has the model + a reliable endpoint) before
+            // the line-out gate — otherwise the re-check is skipped and a
+            // Fixed→Variable change never clears.
+            let d = devices.values.first { Self.bareDeviceID($0.id) == key } ?? member
+            guard Self.hasLineOut(d.modelName) else { continue }
+            checkedOutputFixed.insert(key)
+            let fixed = await renderingControl.getOutputFixed(device: d)
+            if fixed {
+                if fixedOutputDeviceIDs.insert(key).inserted {
+                    sonosDebugLog("[VOLUME] \(d.roomName) line-out is fixed — volume control disabled (#50)")
+                }
+            } else if fixedOutputDeviceIDs.remove(key) != nil {
+                sonosDebugLog("[VOLUME] \(d.roomName) line-out no longer fixed — volume control enabled")
+            }
+        }
+    }
+
+    /// Queries `GetOutputFixed` once per line-out device and caches the result.
+    /// Restricted to line-out models so non-line-out speakers aren't pinged with
+    /// an action they don't implement (UPnP 803 spam).
+    public func refreshFixedOutputStatus() async {
+        let toCheck = devices.values.filter {
+            !checkedOutputFixed.contains(Self.bareDeviceID($0.id)) && Self.hasLineOut($0.modelName)
+        }
+        for d in toCheck {
+            let key = Self.bareDeviceID(d.id)
+            checkedOutputFixed.insert(key)
+            if await renderingControl.getOutputFixed(device: d) {
+                fixedOutputDeviceIDs.insert(key)
+                sonosDebugLog("[VOLUME] \(d.roomName) line-out is fixed — volume control disabled (#50)")
+            }
+        }
+    }
+
     public func setVolume(device: SonosDevice, volume: Int) async throws {
+        // Fixed line-out (Connect/Port/Amp) rejects SetVolume with UPnP 501.
+        // Skip the call entirely so we don't spam faults (issue #50).
+        if fixedOutputDeviceIDs.contains(Self.bareDeviceID(device.id)) {
+            sonosDebugLog("[VOLUME] skip setVolume — \(device.roomName) line-out is fixed (#50)")
+            return
+        }
         recordExpectedVolumeEcho(deviceID: device.id, value: volume)
         sonosDebugLog("[RC-SOAP-WRITE] setVolume room=\(device.roomName) id=\(device.id) → \(volume)")
         // Portable speakers (Move/Roam) have a known firmware quirk:
@@ -1447,7 +1598,22 @@ public class SonosManager: ObservableObject {
                             "groupCoordinator": groupCoord
                          ])
         }
-        try await renderingControl.setVolume(device: device, volume: volume)
+        do {
+            try await renderingControl.setVolume(device: device, volume: volume)
+        } catch {
+            // A fixed line-out reports its lock late via UPnP 501. Treat as
+            // benign, remember it (slider disables, no further attempts), and
+            // don't surface a user-facing error (issue #50).
+            if case SOAPError.soapFault(let code, _) = error, code == "501" {
+                fixedOutputDeviceIDs.insert(Self.bareDeviceID(device.id))
+                checkedOutputFixed.insert(Self.bareDeviceID(device.id))
+                sonosDiagLog(.info, tag: "VOLUME",
+                             "SetVolume rejected (501) — \(device.roomName) line-out fixed; disabling control (#50)",
+                             context: ["deviceID": device.id])
+                return
+            }
+            throw error
+        }
         scheduleDeviceVolumeVerify(device: device)
     }
 
@@ -1589,11 +1755,84 @@ public class SonosManager: ObservableObject {
     public func getQueue(group: SonosGroup, start: Int = 0, count: Int = PageSize.queue) async throws -> (items: [QueueItem], total: Int) {
         guard let coordinator = group.coordinator else { return ([], 0) }
         let result = try await contentDirectory.browseQueue(device: coordinator, start: start, count: count)
+        // Recover real titles for rows where the speaker returned a filename
+        // (e.g. Suno `<uuid>.mp3`) — the song name is in the play-time cache.
+        let items = result.items.map { enrichQueueItemFromCache($0) }
         // Cache queue items for track info recovery (Apple Music tracks may have empty GetPositionInfo)
-        if start == 0 && !result.items.isEmpty {
-            lastQueueItems[group.coordinatorID] = result.items
+        if start == 0 && !items.isEmpty {
+            lastQueueItems[group.coordinatorID] = items
         }
-        return result
+        return (items, result.total)
+    }
+
+    /// Replaces a queue row's filename/empty title (and missing artist/art)
+    /// with the cached values captured at play time, keyed by the row's URI.
+    /// Clips we've already kicked off a title fetch for this session, so a
+    /// queue full of unresolved Suno rows triggers at most one fetch each.
+    private var sunoTitleFetches = Set<String>()
+
+    /// Self-heal a Suno track's title when it isn't in the persistent store
+    /// (e.g. a clip queued without going through our resolver). Fetches the
+    /// `/song/<uuid>` page in the background — which persists the title — then
+    /// patches any now-playing row and refreshes the queue.
+    func ensureSunoTitle(forUUID uuid: String) {
+        guard SunoCatalog.title(forUUID: uuid) == nil,
+              sunoTitleFetches.insert(uuid).inserted else { return }
+        Task { [weak self] in
+            _ = try? await SunoResolver.resolve("https://suno.com/song/\(uuid)")
+            guard let self, let title = SunoCatalog.title(forUUID: uuid) else { return }
+            for (gid, md) in self.groupTrackMetadata
+            where md.trackURI.flatMap({ SunoCatalog.uuid(fromURI: $0) }) == uuid {
+                var m = md
+                m.title = title
+                self.groupTrackMetadata[gid] = m
+            }
+            self.postQueueChanged(optimisticItems: [])
+        }
+    }
+
+    private func enrichQueueItemFromCache(_ item: QueueItem) -> QueueItem {
+        var copy = item
+
+        // Suno code path — keyed on the suno.ai host + clip UUID in the row's
+        // URI. Cover is derived from the UUID; title comes from the persistent
+        // store. Both survive restarts (the speaker returns a blank getaa art
+        // proxy + the filename as title for these direct-URL tracks).
+        if let uri = item.uri, let uuid = SunoCatalog.uuid(fromURI: uri) {
+            copy.albumArtURI = SunoCatalog.coverURL(forUUID: uuid)
+            if let t = SunoCatalog.title(forUUID: uuid) {
+                copy.title = t
+            } else if copy.title.isEmpty || TrackMetadata.isTechnicalName(copy.title) {
+                ensureSunoTitle(forUUID: uuid)
+            }
+            return copy
+        }
+
+        // TIDAL code path — resolved CDN URL with no embedded cover id; art /
+        // title / artist come from the persistent catalog (see TidalCatalog).
+        if let uri = item.uri, TidalCatalog.key(fromURI: uri) != nil {
+            if let art = TidalCatalog.art(forURI: uri) { copy.albumArtURI = art }
+            if copy.title.isEmpty || TrackMetadata.isTechnicalName(copy.title),
+               let t = TidalCatalog.title(forURI: uri) { copy.title = t }
+            if copy.artist.isEmpty, let a = TidalCatalog.artist(forURI: uri) { copy.artist = a }
+            return copy
+        }
+
+        guard let uri = item.uri,
+              let cached = cachedTrackInfo[uri]
+                ?? (uri.removingPercentEncoding.flatMap { cachedTrackInfo[$0] })
+        else { return item }
+        // Title only when the speaker gave a filename/empty; artwork whenever
+        // missing (direct-URL tracks often report a title but no art).
+        if (copy.title.isEmpty || TrackMetadata.isTechnicalName(copy.title)), !cached.title.isEmpty {
+            copy.title = cached.title
+        }
+        if copy.artist.isEmpty { copy.artist = cached.artist }
+        if copy.album.isEmpty { copy.album = cached.album }
+        if (copy.albumArtURI == nil || copy.albumArtURI?.isEmpty == true), let art = cached.artURL {
+            copy.albumArtURI = art
+        }
+        return copy
     }
 
     public func removeFromQueue(group: SonosGroup, trackIndex: Int) async throws {
@@ -1640,6 +1879,16 @@ public class SonosManager: ObservableObject {
 
         let playable = items.filter { ($0.resourceURI ?? "").isEmpty == false }
         guard let first = playable.first else { return }
+
+        // Cache every track's title + art by URI up front so the queue panel
+        // can recover them for ALL rows (the speaker returns a filename / no
+        // art for direct-URL tracks like Suno), not just the first.
+        for it in playable where !it.title.isEmpty {
+            guard let u = it.resourceURI, !u.isEmpty else { continue }
+            let c = CachedTrack(title: it.title, artist: it.artist, album: it.album, artURL: it.albumArtURI)
+            cachedTrackInfo[u] = c
+            if let d = u.removingPercentEncoding, d != u { cachedTrackInfo[d] = c }
+        }
 
         // Stop playback first. `RemoveAllTracksFromQueue` on a Sonos
         // coordinator that's actively playing leaves the currently-
@@ -1689,8 +1938,11 @@ public class SonosManager: ObservableObject {
             pendingMeta.albumArtURI = first.albumArtURI
             pendingMeta.trackURI = uri
             groupTrackMetadata[coordinator.id] = pendingMeta
-            groupTransportStates[coordinator.id] = .transitioning
-            awaitingPlayback[coordinator.id] = true
+            // Optimistic .playing — UI stays stuck on .transitioning
+            // when the AVT SUBSCRIBE callback URL is stale (network
+            // path change). Real AVT event resolves to same value.
+            groupTransportStates[coordinator.id] = .playing
+            awaitingPlayback[coordinator.id] = false
             setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
         }
 
@@ -1899,12 +2151,15 @@ public class SonosManager: ObservableObject {
         pendingMeta.albumArtURI = albumArtURI
         pendingMeta.trackURI = uri
         groupTrackMetadata[coordinator.id] = pendingMeta
-        groupTransportStates[coordinator.id] = .transitioning
-        awaitingPlayback[coordinator.id] = true
         setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
 
         try await avTransport.setAVTransportURI(device: coordinator, uri: uri, metadata: metadata)
         try await avTransport.play(device: coordinator)
+        // Optimistic .playing — see playItemsReplacingQueue for why.
+        // Written after play() so a transport error leaves the UI
+        // accurate instead of claiming a play that never started.
+        groupTransportStates[coordinator.id] = .playing
+        awaitingPlayback[coordinator.id] = false
     }
 
     // MARK: - Grouping
@@ -2018,6 +2273,43 @@ public class SonosManager: ObservableObject {
 
         self.browseSections = sections
         saveCache()
+    }
+
+    /// Triggers a local music-library reindex (`RefreshShareIndex`) on every
+    /// discovered household that has at least one configured share. Hits S1 and
+    /// S2 systems automatically — one coordinator per distinct household — and
+    /// silently skips households with no library, so a single-system setup
+    /// produces no errors. Returns how many systems a reindex was sent to and
+    /// how many had a library at all.
+    public func updateMusicLibrary() async -> (triggered: Int, librariesFound: Int) {
+        // One reachable coordinator per distinct household (S1 + S2).
+        var byHousehold: [String: SonosGroup] = [:]
+        for g in groups where g.coordinator != nil {
+            let hh = g.householdID ?? g.coordinatorID
+            if byHousehold[hh] == nil { byHousehold[hh] = g }
+        }
+        var triggered = 0
+        var librariesFound = 0
+        for (hh, g) in byHousehold {
+            guard let coord = g.coordinator else { continue }
+            // Only reindex households that actually have a music-library share —
+            // RefreshShareIndex on a library-less household is pointless and can
+            // fault. `S:` is the share-list container.
+            let shareCount = (try? await contentDirectory.browse(device: coord, objectID: "S:", count: 1).total) ?? 0
+            guard shareCount > 0 else {
+                sonosDebugLog("[LIBRARY] household \(hh) has no music-library share — skipped")
+                continue
+            }
+            librariesFound += 1
+            do {
+                try await contentDirectory.refreshShareIndex(device: coord)
+                triggered += 1
+                sonosDebugLog("[LIBRARY] RefreshShareIndex sent to household \(hh) via \(coord.roomName)")
+            } catch {
+                sonosDebugLog("[LIBRARY] RefreshShareIndex failed for household \(hh): \(error)")
+            }
+        }
+        return (triggered, librariesFound)
     }
 
     public func loadMusicServices() async {
@@ -2170,15 +2462,15 @@ public class SonosManager: ObservableObject {
                     )
                     try await avTransport.play(device: coordinator)
                 }
-                // Success — show new item info with transitioning state
+                // Optimistic .playing — see playItemsReplacingQueue.
                 var pendingMeta = initialMeta
                 if let cachedArt = discoveredArtURLs[item.objectID] ?? lookupCachedArt(uri: item.resourceURI, title: item.title) {
                     pendingMeta.albumArtURI = cachedArt
                 }
                 groupTrackMetadata[coordinator.id] = pendingMeta
-                groupTransportStates[coordinator.id] = .transitioning
+                groupTransportStates[coordinator.id] = .playing
                 setTransportGrace(groupID: coordinator.id, duration: Timing.playbackGracePeriod)
-                awaitingPlayback[coordinator.id] = true
+                awaitingPlayback[coordinator.id] = false
                 // Notify QueueView to reload — it was previously
                 // missing this signal when the queue-based play path
                 // ran, leaving the panel stale until the user toggled
@@ -2198,6 +2490,9 @@ public class SonosManager: ObservableObject {
                     )
                     try await avTransport.play(device: coordinator)
                 }
+                // Promote past the preflight .transitioning.
+                groupTransportStates[coordinator.id] = .playing
+                awaitingPlayback[coordinator.id] = false
                 postQueueChanged(optimisticItems: [])
             } else {
                 // Pre-strategy gate: SMAPI service-track URIs
@@ -2273,29 +2568,7 @@ public class SonosManager: ObservableObject {
                     // URI with UPnP 402, but accepts the resolved URL
                     // with empty DIDL. Recently-played items already hold
                     // the resolved URL via play history.
-                    if let resolver = smapiURIResolver,
-                       item.objectID.hasPrefix("smapi:") {
-                        let trimmed = item.objectID.dropFirst("smapi:".count)
-                        if let colon = trimmed.firstIndex(of: ":"),
-                           let sid = Int(trimmed[..<colon]) {
-                            let itemID = String(trimmed[trimmed.index(after: colon)...])
-                            do {
-                                if let resolved = try await resolver(sid, itemID),
-                                   !resolved.isEmpty {
-                                    effectiveURI = resolved
-                                    effectiveMeta = ""
-                                }
-                            } catch {
-                                sonosDiagLog(.warning, tag: "PLAYBACK",
-                                             "SMAPI getMediaURI resolve failed; falling back to raw URI",
-                                             context: [
-                                                "sid": String(sid),
-                                                "itemID": itemID,
-                                                "error": String(describing: error)
-                                             ])
-                            }
-                        }
-                    }
+                    (effectiveURI, effectiveMeta) = await resolveSMAPIPlayback(item, uri: uri, meta: meta)
                 case .directURIWithDIDL:
                     // TuneIn music stations (s-prefix), Sonos favourites,
                     // raw HTTP/HLS, line-in, etc. The URI is the
@@ -2326,7 +2599,7 @@ public class SonosManager: ObservableObject {
                         ? String(item.objectID.dropFirst("tunein:".count))
                         : item.objectID
                     if let resolved = await ServiceSearchProvider.shared.resolveTuneIn(guideId: guideId) {
-                        let trackDIDL = ServiceSearchProvider.shared.buildResolvedTuneInTrackDIDL(
+                        let trackDIDL = ServiceSearchProvider.shared.buildDirectHTTPTrackDIDL(
                             title: item.title,
                             artist: item.artist ?? "",
                             url: resolved.directURL,
@@ -2353,6 +2626,11 @@ public class SonosManager: ObservableObject {
                                 )
                                 try await avTransport.play(device: coordinator)
                             }
+                            // Optimistic .playing — see playItemsReplacingQueue.
+                            // Without it a stale AVT SUBSCRIBE callback after a
+                            // network-path change can leave the UI on .transitioning.
+                            groupTransportStates[coordinator.id] = .playing
+                            awaitingPlayback[coordinator.id] = false
                             postQueueChanged(optimisticItems: [])
                             return
                         } catch {
@@ -2369,6 +2647,40 @@ public class SonosManager: ObservableObject {
                         sonosDiagLog(.warning, tag: "PLAYBACK",
                                      "TuneIn Tune.ashx resolve returned no playable URL; falling back to raw URI",
                                      context: ["guideId": guideId])
+                    }
+                case .directHTTPSQueue:
+                    // Direct finite HTTPS media file that isn't a Sonos
+                    // service (e.g. a public Suno CDN MP3). `uri` is already
+                    // the direct CDN URL and `meta` already carries the
+                    // http-get track DIDL — no resolve step. Direct
+                    // SetAVTransportURI of a raw https:// URL is rejected
+                    // (UPnP 714); queue-based play is the only working route,
+                    // identical to the TuneIn-topic branch above.
+                    sonosDiagLog(.info, tag: "PLAYBACK",
+                                 "Direct HTTPS queue play: \(item.title.isEmpty ? "<no title>" : item.title)",
+                                 context: ["uri": uri])
+                    do {
+                        try await withStaleHandling(for: group.name) {
+                            try await contentDirectory.removeAllTracksFromQueue(device: coordinator)
+                            _ = try await contentDirectory.addURIToQueue(
+                                device: coordinator, uri: uri, metadata: meta
+                            )
+                            try await avTransport.setAVTransportURI(
+                                device: coordinator,
+                                uri: "x-rincon-queue:\(coordinator.id)#0"
+                            )
+                            try await avTransport.play(device: coordinator)
+                        }
+                        // Optimistic .playing — see playItemsReplacingQueue.
+                        groupTransportStates[coordinator.id] = .playing
+                        awaitingPlayback[coordinator.id] = false
+                        postQueueChanged(optimisticItems: [])
+                        return
+                    } catch {
+                        sonosDiagLog(.error, tag: "PLAYBACK",
+                                     "Direct HTTPS queue play failed",
+                                     context: ["uri": uri, "error": String(describing: error)])
+                        throw error
                     }
                 }
                 sonosDebugLog("[PLAYBACK] SetAVTransportURI: \(effectiveURI.prefix(80))")
@@ -2405,8 +2717,19 @@ public class SonosManager: ObservableObject {
                                     "artist": item.artist ?? "",
                                     "service": serviceLabel(for: item) ?? "unknown"
                                  ])
+                    // A persistent 701 on a single-track direct play (after the
+                    // stale-handling rescan) means the speaker can't resolve the
+                    // URI — almost always because the track's service/library
+                    // isn't set up on this speaker's system. Surface that
+                    // instead of a misleading "speaker layout changed" error.
+                    if case StaleDataError.topologyStale = error {
+                        throw StaleDataError.serviceUnavailable
+                    }
                     throw error
                 }
+                // Optimistic .playing — see playItemsReplacingQueue.
+                groupTransportStates[coordinator.id] = .playing
+                awaitingPlayback[coordinator.id] = false
                 // Direct-URI playback bypasses the queue, but `Play
                 // Now` semantics imply replacing whatever was there;
                 // a notification triggers a Browse(Q:0) so the panel
@@ -2638,6 +2961,56 @@ public class SonosManager: ObservableObject {
         return firstTrack
     }
 
+    /// Resolves a `.smapiResolveThenEmpty` browse item to its direct stream
+    /// URL via `getMediaURI` (using Choragus's stored token), returning the
+    /// resolved URL with empty DIDL. Returns the original `uri`/`meta`
+    /// unchanged for any other item or when resolution fails.
+    ///
+    /// Centralised so play and enqueue apply identical resolution.
+    /// Controller-authenticated services (e.g. TIDAL) have no speaker-side
+    /// account binding, so the raw `x-sonos-http:…?sid=…&sn=…` URI faults
+    /// UPnP 800; the resolved direct URL plays without any account binding,
+    /// which also makes the `sn` value irrelevant.
+    private func resolveSMAPIPlayback(_ item: BrowseItem, uri: String, meta: String) async -> (uri: String, meta: String) {
+        guard item.playbackStrategy == .smapiResolveThenEmpty,
+              let resolver = smapiURIResolver,
+              item.objectID.hasPrefix("smapi:") else { return (uri, meta) }
+        let trimmed = item.objectID.dropFirst("smapi:".count)
+        guard let colon = trimmed.firstIndex(of: ":"),
+              let sid = Int(trimmed[..<colon]) else { return (uri, meta) }
+        let itemID = String(trimmed[trimmed.index(after: colon)...])
+        do {
+            if let resolved = try await resolver(sid, itemID), !resolved.isEmpty {
+                // Only adopt a resolved URL that is a DIRECT stream. The whole
+                // point of this step is to swap a controller-authenticated
+                // service track (e.g. TIDAL → https://…tidal.com CDN) for a URL
+                // the speaker can play with empty DIDL. Some services return
+                // another Sonos service URI from getMediaURI — Spotify gives
+                // `x-spotify://spotify:track:ID`, which needs DIDL + account
+                // binding and the speaker REJECTS on AddURIToQueue (UPnP 804).
+                // Keep the original `x-sonos-spotify:…?sid=12` + DIDL in that
+                // case, which the queue accepts (same form background-fill uses).
+                guard resolved.hasPrefix("http://") || resolved.hasPrefix("https://") else {
+                    return (uri, meta)
+                }
+                // Persist TIDAL's browse-time art/title/artist keyed to the
+                // resolved play URL — the empty DIDL strips them otherwise, and
+                // the CDN URL carries no recoverable cover id (unlike Suno).
+                if sid == ServiceID.tidal {
+                    TidalCatalog.remember(playURL: resolved, art: item.albumArtURI,
+                                          title: item.title, artist: item.artist ?? "")
+                }
+                return (resolved, "")
+            }
+        } catch {
+            sonosDiagLog(.warning, tag: "PLAYBACK",
+                         "SMAPI getMediaURI resolve failed; falling back to raw URI",
+                         context: ["sid": String(sid), "itemID": itemID,
+                                   "error": String(describing: error)])
+        }
+        return (uri, meta)
+    }
+
     public func addBrowseItemToQueue(_ item: BrowseItem, in group: SonosGroup, playNext: Bool = false, atPosition: Int = 0) async throws -> Int {
         guard let coordinator = group.coordinator else { return 0 }
         isAddingToQueue = true
@@ -2658,7 +3031,17 @@ public class SonosManager: ObservableObject {
             // feels this difference — one fewer SOAP call per Add to Queue.
         }
 
-        if let uri = item.resourceURI, !uri.isEmpty {
+        if let rawURI = item.resourceURI, !rawURI.isEmpty {
+            // Unescape metadata — browse parser stores it XML-escaped
+            var rawMeta = item.resourceMetadata ?? ""
+            if rawMeta.contains("&lt;") {
+                rawMeta = XMLResponseParser.xmlUnescape(rawMeta)
+            }
+            // Resolve controller-authenticated SMAPI items (e.g. TIDAL) to a
+            // direct stream URL with empty DIDL — same step the play path
+            // applies. Without it the raw `sid=…&sn=…` URI faults UPnP 800.
+            let (uri, meta) = await resolveSMAPIPlayback(item, uri: rawURI, meta: rawMeta)
+
             let cached = CachedTrack(
                 title: item.title, artist: item.artist ?? "",
                 album: item.album ?? "", artURL: item.albumArtURI
@@ -2672,11 +3055,6 @@ public class SonosManager: ObservableObject {
                 }
             }
 
-            // Unescape metadata — browse parser stores it XML-escaped
-            var meta = item.resourceMetadata ?? ""
-            if meta.contains("&lt;") {
-                meta = XMLResponseParser.xmlUnescape(meta)
-            }
             sonosDebugLog("[QUEUE] Adding URI to queue: \(uri.prefix(60)) atPos=\(insertAt) playNext=\(playNext)")
             let result: Int
             do {
@@ -2809,6 +3187,7 @@ public class SonosManager: ObservableObject {
         if lower.contains("audible") { return "Audible" }
         if lower.contains("iheart") || lower.contains("iheartradio") { return "iHeartRadio" }
         if lower.contains("calmradio") || uri.contains("sid=144") { return ServiceName.calmRadio }
+        if lower.contains("suno.ai") { return ServiceName.suno }
 
         // Radio streams — check after specific services
         if decoded.hasPrefix(URIPrefix.sonosApiStream) || decoded.hasPrefix(URIPrefix.sonosApiRadio) { return ServiceName.radio }
@@ -2956,6 +3335,50 @@ extension SonosManager: TransportStrategyDelegate {
         // trackURI change instead, which converges on the right state
         // regardless of which source happened to be racy this time.
         detectTuneInAdLoop(groupID: groupID, metadata: metadata)
+
+        // Suno normalization up front so it applies on every path below
+        // (including the first-metadata and station-change early returns):
+        // derive the cover from the clip id, recover the persisted title, and
+        // lazily fetch it if this clip has never been resolved.
+        var metadata = metadata
+        if let uri = metadata.trackURI, let uuid = SunoCatalog.uuid(fromURI: uri) {
+            metadata.albumArtURI = SunoCatalog.coverURL(forUUID: uuid)
+            if let t = SunoCatalog.title(forUUID: uuid) {
+                metadata.title = t
+            } else if metadata.title.isEmpty || TrackMetadata.isTechnicalName(metadata.title) {
+                ensureSunoTitle(forUUID: uuid)
+            }
+            // Suno's style tags become the track genre (the speaker reports
+            // none for direct-URL tracks) — feeds history + Club Vis matching.
+            if metadata.genre.isEmpty, let g = SunoCatalog.genre(forUUID: uuid) {
+                metadata.genre = g
+            }
+            // Suno creator → track artist (speaker reports none for direct URLs).
+            if metadata.artist.isEmpty, let a = SunoCatalog.artist(forUUID: uuid) {
+                metadata.artist = a
+            }
+        }
+        // TIDAL normalization: tracks play via a resolved CDN URL with empty
+        // DIDL, so recover art/title/artist from the persistent catalog keyed
+        // on the play URL (populated at resolve time).
+        if let uri = metadata.trackURI, TidalCatalog.key(fromURI: uri) != nil {
+            if let art = TidalCatalog.art(forURI: uri) { metadata.albumArtURI = art }
+            if metadata.title.isEmpty || TrackMetadata.isTechnicalName(metadata.title),
+               let t = TidalCatalog.title(forURI: uri) { metadata.title = t }
+            if metadata.artist.isEmpty, let a = TidalCatalog.artist(forURI: uri) { metadata.artist = a }
+        }
+
+        // Line-In: `x-rincon-stream:RINCON_<sourceID>` is an analog input from
+        // another speaker — name the source room so Now Playing reads "Line-In"
+        // / "Guest Room 2" instead of a bare "Line-In".
+        let lineInPrefix = "x-rincon-stream:"
+        if let uri = metadata.trackURI, uri.hasPrefix(lineInPrefix) {
+            let sourceID = String(uri.dropFirst(lineInPrefix.count).prefix { $0.isLetter || $0.isNumber || $0 == "_" })
+            let sourceRoom = devices[sourceID]?.roomName ?? ""
+            metadata.title = "Line-In"
+            if !sourceRoom.isEmpty { metadata.artist = sourceRoom }
+        }
+
         guard let existing = groupTrackMetadata[groupID] else {
             // First metadata — also try to populate queue cache if playing from queue
             var initial = metadata
@@ -2985,7 +3408,10 @@ extension SonosManager: TransportStrategyDelegate {
         // Apple Music queue tracks use x-sonosapi-hls-static URIs which look like radio
         // but have no stationName — so stationName is the reliable discriminator.
         var enriched = metadata
-        if enriched.title.isEmpty {
+        // Recover when the speaker gives us no title OR a technical filename —
+        // direct-URL tracks (e.g. a Suno CDN `<uuid>.mp3`) report the file name
+        // as the title; the real song name is in the play-time cache.
+        if enriched.title.isEmpty || TrackMetadata.isTechnicalName(enriched.title) {
             var cached: CachedTrack?
             let isActiveRadio = !enriched.stationName.isEmpty &&
                                 (enriched.trackURI.map(URIPrefix.isRadio) ?? false)
@@ -3023,6 +3449,18 @@ extension SonosManager: TransportStrategyDelegate {
                 if enriched.albumArtURI == nil { enriched.albumArtURI = cached.artURL }
             }
         }
+
+        // Artwork recovery, independent of the title check above. Direct-URL
+        // tracks (e.g. a Suno CDN MP3) frequently report a usable title but no
+        // album art on the speaker's poll — without this, art that was already
+        // showing gets blanked. Backfill from the play-time art cache.
+        if enriched.albumArtURI == nil || enriched.albumArtURI?.isEmpty == true,
+           let uri = enriched.trackURI {
+            let art = cachedTrackInfo[uri]?.artURL
+                ?? (uri.removingPercentEncoding.flatMap { cachedTrackInfo[$0]?.artURL })
+            if let art, !art.isEmpty { enriched.albumArtURI = art }
+        }
+        // (Suno normalization already applied at the top of this method.)
 
         // Don't overwrite existing good metadata with empty or technical stream names
         // BUT only if the track hasn't changed (same URI = same track, just a poll update)
@@ -3249,23 +3687,29 @@ extension SonosManager: TransportStrategyDelegate {
     }
 
     private func enrichAppleMusicArtistIfNeeded(groupID: String, metadata: TrackMetadata) {
-        // Enrich when the existing artist field is empty OR when it looks
-        // album-shaped (Sonos sometimes leaks the album name into
-        // `<dc:creator>` for HLS-static Apple Music favorites). We
-        // overwrite a suspect value because it's worse-than-nothing — it
-        // poisons every downstream lookup.
-        guard metadata.artist.isEmpty || Self.isAlbumShapedArtist(metadata.artist) else { return }
+        // Fires for every Apple Music URI that carries a catalog song
+        // ID. Two situations it covers:
+        //   1. HLS-favorite DIDLs with empty / album-shaped artist —
+        //      original v4.9 use case (fill in the blank).
+        //   2. HLS-static playback where Sonos's reported text leaks
+        //      stale title/artist from the previous track but the URI
+        //      carries the correct catalog ID. iTunes is authoritative
+        //      for that ID, so we override the speaker's reported
+        //      title/artist with the lookup result.
         guard let uri = metadata.trackURI, !uri.isEmpty else { return }
-        guard let songID = Self.extractAppleMusicSongID(from: uri) else { return }
+        guard let songID = URIPrefix.appleMusicSongID(from: uri) else { return }
 
-        // Persistent cache: subsequent plays of the same favorite hit the
-        // local store and skip both the network call and the stale-trip
-        // around `appleMusicEnrichmentResolved` (which only lives for the
-        // process lifetime).
+        // Persistent cache: subsequent plays of the same track hit the
+        // local store and skip the network call.
+        // Pre-v4.10.1 entries lack `title` / `artURL` — treat them as a
+        // miss so the catalog text/art override gets populated on the
+        // next play. Within 90 days (current TTL) every replayed track
+        // self-migrates without user action.
         let cacheKey = MetadataCacheRepository.Kind.appleMusicTrack.key(songID)
         if let cached = metadataCacheForAppleMusic?.get(cacheKey),
            let data = cached.data(using: .utf8),
-           let payload = try? JSONDecoder().decode(AppleMusicTrackEnrichment.self, from: data) {
+           let payload = try? JSONDecoder().decode(AppleMusicTrackEnrichment.self, from: data),
+           payload.title != nil {
             applyAppleMusicEnrichment(groupID: groupID, uri: uri, payload: payload, source: "cache")
             return
         }
@@ -3291,8 +3735,15 @@ extension SonosManager: TransportStrategyDelegate {
                   let artistName = first["artistName"] as? String,
                   !artistName.isEmpty else { return }
             let albumName = first["collectionName"] as? String
+            let trackName = first["trackName"] as? String
+            // Upscale 100→600 the same way `AlbumArtSearchService` does.
+            let artURL = (first["artworkUrl100"] as? String)
+                .map { $0.replacingOccurrences(of: "100x100", with: "600x600") }
 
-            let payload = AppleMusicTrackEnrichment(artist: artistName, album: albumName)
+            let payload = AppleMusicTrackEnrichment(
+                artist: artistName, album: albumName,
+                title: trackName, artURL: artURL
+            )
 
             await MainActor.run { [weak self] in
                 guard let self else { return }
@@ -3308,28 +3759,50 @@ extension SonosManager: TransportStrategyDelegate {
         }
     }
 
-    /// Writes the enriched fields onto `groupTrackMetadata[groupID]` when
-    /// the track URI still matches and the existing artist is either empty
-    /// or album-shaped. If an album-shaped value is overwritten, we move
-    /// it into the `album` field when that field is empty — it really was
-    /// the album, just labelled wrong.
+    /// Writes catalog-authoritative fields onto `groupTrackMetadata[groupID]`
+    /// when the track URI still matches. Title and artist override
+    /// unconditionally (catalog ID is the source of truth — speaker text
+    /// metadata can leak from the previous track on HLS-static
+    /// transitions). Album fills only when empty (legitimate Deluxe /
+    /// Standard variations exist and we'd rather preserve Sonos's value
+    /// when it's already present). Art URL fills only when empty or
+    /// when the current value is a `/getaa?` proxy (the proxy is flaky
+    /// for HLS and the iTunes URL is more reliable).
     private func applyAppleMusicEnrichment(groupID: String, uri: String,
                                            payload: AppleMusicTrackEnrichment, source: String) {
         guard var meta = groupTrackMetadata[groupID] else { return }
         guard meta.trackURI == uri else { return }
-        let existingArtistIsAlbum = Self.isAlbumShapedArtist(meta.artist)
-        guard meta.artist.isEmpty || existingArtistIsAlbum else { return }
 
+        var changed = false
         // Reclaim a misplaced album label before overwriting the artist.
+        let existingArtistIsAlbum = Self.isAlbumShapedArtist(meta.artist)
         if existingArtistIsAlbum && meta.album.isEmpty {
             meta.album = meta.artist
+            changed = true
         }
-        meta.artist = payload.artist
+        if let title = payload.title, !title.isEmpty, meta.title != title {
+            meta.title = title
+            changed = true
+        }
+        if !payload.artist.isEmpty, meta.artist != payload.artist {
+            meta.artist = payload.artist
+            changed = true
+        }
         if meta.album.isEmpty, let albumName = payload.album, !albumName.isEmpty {
             meta.album = albumName
+            changed = true
         }
-        groupTrackMetadata[groupID] = meta
-        sonosDebugLog("[ENRICH] Apple Music \(source) → \(payload.artist) — \(payload.album ?? "")")
+        if let art = payload.artURL, !art.isEmpty {
+            let currentArt = meta.albumArtURI ?? ""
+            if currentArt.isEmpty || currentArt.contains("/getaa?") {
+                meta.albumArtURI = art
+                changed = true
+            }
+        }
+        if changed {
+            groupTrackMetadata[groupID] = meta
+            sonosDebugLog("[ENRICH] Apple Music \(source) → \(payload.title ?? "?") / \(payload.artist) / \(payload.album ?? "?")")
+        }
     }
 
     /// Returns true when an "artist" string is actually an album label —
@@ -3354,19 +3827,6 @@ extension SonosManager: TransportStrategyDelegate {
     ///   `x-sonos-http:song%3a<ID>.mp4?…`
     ///   `x-sonosapi-hls-static:song%3a<ID>?…`
     /// Returns nil for any other URI shape.
-    private static func extractAppleMusicSongID(from uri: String) -> String? {
-        guard uri.contains("x-sonos-http:song") || uri.contains("x-sonosapi-hls-static:song") else {
-            return nil
-        }
-        // Decode percent-encoding so `song%3a123` → `song:123`.
-        let decoded = uri.removingPercentEncoding ?? uri
-        // Find "song:" then read consecutive digits.
-        guard let range = decoded.range(of: "song:") else { return nil }
-        let after = decoded[range.upperBound...]
-        let digits = after.prefix { $0.isNumber }
-        return digits.isEmpty ? nil : String(digits)
-    }
-
     /// Detects technical stream names that should not replace friendly titles.
     /// e.g. "moviesoundtracks_mobile_mp3", "s233145", "stream_128k"
 
@@ -3407,6 +3867,21 @@ extension SonosManager: TransportStrategyDelegate {
             tagPublish("vol")
             deviceVolumes[deviceID] = volume
             sonosDebugLog("[RC-WRITE] vol APPLY room=\(room) value=\(volume) changed=true")
+            // A device set to Fixed line-out jumps to (and pins at) volume 100.
+            // Treat a change TO 100 on a line-out model as a trigger to verify
+            // GetOutputFixed immediately, so "Fixed Volume" appears without
+            // waiting for the user to drag the slider (#50).
+            if volume == 100, let dev = devices[deviceID], Self.hasLineOut(dev.modelName),
+               !fixedOutputDeviceIDs.contains(Self.bareDeviceID(deviceID)) {
+                Task { [weak self] in
+                    guard let self else { return }
+                    if await self.renderingControl.getOutputFixed(device: dev) {
+                        self.fixedOutputDeviceIDs.insert(Self.bareDeviceID(deviceID))
+                        self.checkedOutputFixed.insert(Self.bareDeviceID(deviceID))
+                        sonosDebugLog("[VOLUME] \(dev.roomName) line-out fixed (vol=100 trigger) — control disabled (#50)")
+                    }
+                }
+            }
         }
         // Group-volume propagation: when a coordinator's volume changes,
         // the Sonos cluster sets per-member volumes at proportional values,

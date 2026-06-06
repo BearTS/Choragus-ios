@@ -55,7 +55,7 @@ struct ContentView: View {
     /// clipping. Sums to a `requiredMinWidth` of exactly 1409 pt
     /// (200 + 260 + 6 + 640 + 1 + 302) when all panels are visible.
     private let queueMinWidth: CGFloat = 302
-    private let queueMaxWidth: CGFloat = 400
+    private let queueMaxWidth: CGFloat = 600
     private let sidebarWidth: CGFloat = 200
     /// Pixels eaten by the visible separators between panels. Browse panel
     /// is followed by a 6 pt drag handle (with a Divider overlay); queue
@@ -64,12 +64,17 @@ struct ContentView: View {
     /// reserve room for them or the right edge clips (visible as the
     /// queue's vertical scrollbar getting truncated).
     private let browseDividerWidth: CGFloat = 6
-    private let queueDividerWidth: CGFloat = 1
+    private let queueDividerWidth: CGFloat = 6
     /// Sentinel: 0 = no user override (allocator picks default).
     @AppStorage(UDKey.userBrowseWidth) private var userBrowseWidthStored: Double = 0
     private var userBrowseWidth: CGFloat? {
         get { userBrowseWidthStored > 0 ? CGFloat(userBrowseWidthStored) : nil }
         nonmutating set { userBrowseWidthStored = Double(newValue ?? 0) }
+    }
+    @AppStorage(UDKey.userQueueWidth) private var userQueueWidthStored: Double = 0
+    private var userQueueWidth: CGFloat? {
+        get { userQueueWidthStored > 0 ? CGFloat(userQueueWidthStored) : nil }
+        nonmutating set { userQueueWidthStored = Double(newValue ?? 0) }
     }
 
     /// Allocates panel widths so they always sum exactly to
@@ -97,12 +102,13 @@ struct ContentView: View {
         let totalMin = bMin + qMin + nMin
         var slack = max(0, usable - totalMin)
 
-        // Queue: grows up to its max via slack proportional split,
-        // capped at queueMaxWidth - queueMinWidth.
+        // Queue: honors the user's drag-set width (clamped to its range),
+        // else grows up to its max via a slack proportional split.
         var qw = qMin
         if showQueue {
-            let queueGrowCap = queueMaxWidth - queueMinWidth
-            let queueGrowth = min(queueGrowCap, slack * 0.3)
+            let preferred = userQueueWidth ?? (queueMinWidth + slack * 0.3)
+            let target = max(queueMinWidth, min(preferred, queueMaxWidth))
+            let queueGrowth = min(max(0, target - queueMinWidth), slack)
             qw += queueGrowth
             slack -= queueGrowth
         }
@@ -324,7 +330,25 @@ struct ContentView: View {
                                 .frame(width: sizes.nowPlaying)
 
                             if showQueue {
-                                Divider()
+                                // Draggable resize handle on the queue's left
+                                // edge — dragging left widens the queue.
+                                Rectangle()
+                                    .fill(Color.clear)
+                                    .frame(width: 6)
+                                    .contentShape(Rectangle())
+                                    .onHover { inside in
+                                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                                    }
+                                    .overlay(Divider())
+                                    .gesture(
+                                        DragGesture(minimumDistance: 1)
+                                            .onChanged { value in
+                                                // Queue is on the right: dragging left
+                                                // (negative translation) grows it.
+                                                let newWidth = (userQueueWidth ?? sizes.queue) - value.translation.width
+                                                userQueueWidth = max(queueMinWidth, min(newWidth, queueMaxWidth))
+                                            }
+                                    )
                                 QueueView(group: group, sonosManager: sonosManager)
                                     .frame(width: sizes.queue)
                             }

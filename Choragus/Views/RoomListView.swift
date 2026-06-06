@@ -204,7 +204,8 @@ struct RoomListView: View {
     private func roomRow(group: SonosGroup, isPlaying: Bool, isSelected: Bool) -> some View {
         if group.members.count <= 1 {
             HStack(spacing: 6) {
-                speakerWithWaves(playing: isPlaying, grouped: false)
+                speakerWithWaves(playing: isPlaying, grouped: false,
+                                 lineInSource: group.members.contains { sonosManager.lineInSourceDeviceIDs.contains($0.id) })
                     .frame(width: iconColumnWidth)
 
                 Text(group.coordinator?.roomName ?? group.name)
@@ -228,7 +229,8 @@ struct RoomListView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    speakerWithWaves(playing: isPlaying, grouped: true)
+                    speakerWithWaves(playing: isPlaying, grouped: true,
+                                     lineInSource: group.members.contains { sonosManager.lineInSourceDeviceIDs.contains($0.id) })
                         .frame(width: iconColumnWidth)
 
                     Text(coordinator?.roomName ?? group.name)
@@ -261,7 +263,7 @@ struct RoomListView: View {
     // MARK: - Speaker Icon with Waves
 
     /// Icon colors always use the user's chosen zone colors, regardless of selection state.
-    private func speakerWithWaves(playing: Bool, grouped: Bool) -> some View {
+    private func speakerWithWaves(playing: Bool, grouped: Bool, lineInSource: Bool = false) -> some View {
         HStack(spacing: 2) {
             if playing {
                 AnimatedSoundWaves()
@@ -274,6 +276,18 @@ struct RoomListView: View {
             Image(systemName: grouped ? "hifispeaker.2.fill" : "hifispeaker.fill")
                 .font(.system(size: 16))
                 .foregroundStyle(playing ? sonosManager.resolvedPlayingZoneColor : sonosManager.resolvedInactiveZoneColor)
+                .overlay(alignment: .bottomTrailing) {
+                    // Plug badge when a room's speaker is sourcing an active
+                    // line-in (its analog input is being streamed elsewhere).
+                    if lineInSource {
+                        Image(systemName: "powerplug.fill")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(2)
+                            .background(Circle().fill(Color.accentColor))
+                            .offset(x: 4, y: 3)
+                    }
+                }
         }
     }
 

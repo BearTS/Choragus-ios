@@ -17,6 +17,9 @@ struct PlayHistoryView2: View {
     var sourceLabel: (PlayHistoryEntry) -> String
     var onFilter: ((HistoryFilterAction) -> Void)?
     var onStar: ((PlayHistoryEntry) -> Void)?
+    var onPlay: ((PlayHistoryEntry) -> Void)?
+    var onPlayNext: ((PlayHistoryEntry) -> Void)?
+    var onAddToQueue: ((PlayHistoryEntry) -> Void)?
 
     private var groupedByDay: [(String, [PlayHistoryEntry])] {
         let calendar = Calendar.current
@@ -205,6 +208,20 @@ struct PlayHistoryView2: View {
             .padding(.vertical, 4)
         }
         .contextMenu {
+            if HistoryPlayback.canPlay(entry) {
+                Button { onPlay?(entry) } label: {
+                    Label(L10n.playNow, systemImage: "play.fill")
+                }
+                if HistoryPlayback.canQueue(entry) {
+                    Button { onPlayNext?(entry) } label: {
+                        Label(L10n.playNext, systemImage: "text.insert")
+                    }
+                    Button { onAddToQueue?(entry) } label: {
+                        Label(L10n.addToQueue, systemImage: "text.append")
+                    }
+                }
+                Divider()
+            }
             Button {
                 onStar?(entry)
             } label: {

@@ -54,13 +54,13 @@ struct AppleMusicKitConnectRow: View {
     private var actionButton: some View {
         switch auth {
         case .notDetermined:
-            Button("Connect") { Task { await connect() } }
+            Button(L10n.connect) { Task { await connect() } }
                 .disabled(working)
         case .authorised:
-            Button("Re-check") { Task { await refresh() } }
+            Button(L10n.reCheck) { Task { await refresh() } }
                 .disabled(working)
         case .denied:
-            Button("Open System Settings") {
+            Button(L10n.openSystemSettings) {
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Media") {
                     NSWorkspace.shared.open(url)
                 }
@@ -94,26 +94,26 @@ struct AppleMusicKitConnectRow: View {
         switch auth {
         case .authorised:
             if let storefront, !storefront.isEmpty {
-                return "Connected (\(storefront.uppercased()))"
+                return L10n.amConnectedStorefront(storefront.uppercased())
             }
-            return "Connected"
-        case .denied: return "Permission denied"
-        case .noSubscription: return "No active subscription"
-        case .notDetermined: return "Not connected"
-        case .notApplicable: return "Not available in this build"
+            return L10n.amConnected
+        case .denied: return L10n.amPermissionDenied
+        case .noSubscription: return L10n.amNoActiveSubscription
+        case .notDetermined: return L10n.amNotConnected
+        case .notApplicable: return L10n.amNotAvailableInBuild
         }
     }
 
     private var stateDetail: String? {
         switch auth {
         case .authorised:
-            return "Catalog browse, search, library, recommendations."
+            return L10n.amDetailConnected
         case .denied:
-            return "Grant Apple Music access under Privacy & Security → Media & Apple Music to enable."
+            return L10n.amDetailDenied
         case .noSubscription:
-            return "An active Apple Music subscription on the signed-in Apple ID is required."
+            return L10n.amDetailNoSubscription
         case .notDetermined:
-            return "Allow Choragus to read your Apple Music catalogue to enable the MusicKit browse pane."
+            return L10n.amDetailNotConnected
         case .notApplicable:
             return nil
         }
