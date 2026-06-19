@@ -22,6 +22,9 @@ import Foundation
 #if canImport(AppKit)
 import AppKit
 #endif
+#if canImport(UIKit)
+import AVFoundation
+#endif
 import MediaPlayer
 import Combine
 
@@ -57,16 +60,28 @@ public final class MediaKeyHandler: ObservableObject {
         self.sonosManager = sonosManager
         registerRemoteCommands()
         installLocalKeyMonitor()
-        // Eagerly seed MPNowPlayingInfoCenter BEFORE observing changes.
-        // macOS's `rcd` daemon routes media keys to whichever app most
-        // recently published Now Playing info AND set a non-`.unknown`
-        // playbackState. Without this seed, Music.app — if it is
-        // running — wins the routing because it publishes a
-        // .stopped/.paused state at launch and Choragus isn't yet a
-        // candidate. The placeholder is overwritten as soon as a real
-        // track is selected.
+#if canImport(UIKit)
+        // Primary .playback session + silent audio loop → iOS registers us
+        // as the Now Playing source for the Lock Screen / Control Centre widget.
+        activateIOSAudioSession()
+#endif
         seedInitialNowPlayingClaim()
         observeSonosManagerForNowPlaying()
+        // Kick an explicit refresh shortly after start so the widget reflects
+        // real Sonos state even if objectWillChange doesn't fire (e.g. the app
+        // was relaunched while Sonos was already playing and state loaded from
+        // the first GENA poll before our observer was installed).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.refreshNowPlayingInfo()
+#if canImport(UIKit)
+            // Initialise system volume to match Sonos so the HUD is correct
+            // before the user touches a button for the first time.
+            if let self = self {
+                self.lastSyncedSystemVolume = -1  // force the first sync through
+                self.syncSystemVolume(to: self.currentGroupVolume())
+            }
+#endif
+        }
         sonosDiagLog(.info, tag: "MEDIA-KEYS", "MediaKeyHandler started")
     }
 
@@ -76,6 +91,11 @@ public final class MediaKeyHandler: ObservableObject {
             NSEvent.removeMonitor(token)
             localMonitor = nil
         }
+#endif
+#if canImport(UIKit)
+        silentPlayer?.stop()
+        silentPlayer = nil
+        volumeObservation = nil
 #endif
         cancellables.removeAll()
         unregisterRemoteCommands()
@@ -181,6 +201,126 @@ public final class MediaKeyHandler: ObservableObject {
         }
         return .success
     }
+
+    // MARK: - iOS audio session + silent player + volume → Sonos bridge
+
+#if canImport(UIKit)
+    private var silentPlayer: AVAudioPlayer?
+    private var volumeObservation: NSKeyValueObservation?
+    private var isResettingVolume = false
+    private var lastSyncedSystemVolume: Float = -1
+
+    /// Set by the iOS app layer to an MPVolumeView slider setter.
+    /// Receives the target system volume (0.0–1.0) — matching the current
+    /// Sonos group volume — so the phone's volume HUD stays in sync rather
+    /// than bouncing between the pressed value and an arbitrary midpoint.
+    public var resetSystemVolumeCallback: ((Float) -> Void)?
+
+    private func activateIOSAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            // Do NOT use .mixWithOthers — that flags us as a "secondary" source
+            // and iOS gives the Lock Screen Now Playing widget to whichever app
+            // holds a primary (non-mixing) session instead of us.
+            try session.setCategory(.playback, mode: .default)
+            try session.setActive(true)
+            sonosDiagLog(.info, tag: "MEDIA-KEYS", "AVAudioSession activated (.playback, primary)")
+        } catch {
+            sonosDiagLog(.error, tag: "MEDIA-KEYS",
+                         "AVAudioSession activation failed: \(error.localizedDescription)")
+        }
+        startSilentPlayer()
+        observeOutputVolume()
+    }
+
+    private func observeOutputVolume() {
+        let session = AVAudioSession.sharedInstance()
+        volumeObservation = session.observe(\.outputVolume, options: [.new, .old]) { [weak self] _, change in
+            guard let self = self else { return }
+            guard !self.isResettingVolume else { return }
+            guard let old = change.oldValue, let new = change.newValue else { return }
+            let delta = new - old
+            guard abs(delta) > 0.005 else { return }
+
+            // Scale system-volume delta (0–1) → Sonos delta (0–100)
+            let sonosDelta = Int((delta * 100).rounded())
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                let prevSonos = self.currentGroupVolume()
+                self.adjustVolume(by: sonosDelta)
+                // Clamp to what Sonos will actually accept so the HUD tracks truth
+                let nextSonos = max(0, min(100, prevSonos + sonosDelta))
+                self.syncSystemVolume(to: nextSonos)
+            }
+        }
+    }
+
+    // Sets system volume to match a Sonos volume level (0–100).
+    // Deduped so frequent objectWillChange fires don't spam the slider.
+    private func syncSystemVolume(to sonosVolume: Int) {
+        let target = Float(sonosVolume) / 100.0
+        guard abs(target - lastSyncedSystemVolume) > 0.005 else { return }
+        lastSyncedSystemVolume = target
+        isResettingVolume = true
+        resetSystemVolumeCallback?(target)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.isResettingVolume = false
+        }
+    }
+
+    // Read the current average volume of the active Sonos group.
+    private func currentGroupVolume() -> Int {
+        guard let manager = sonosManager, let group = currentGroup() else { return 50 }
+        let vols = group.members.compactMap { manager.deviceVolumes[$0.id] }
+        guard !vols.isEmpty else { return 50 }
+        return vols.reduce(0, +) / vols.count
+    }
+
+    private func startSilentPlayer() {
+        guard let player = try? AVAudioPlayer(data: Self.silentWAVData) else {
+            sonosDiagLog(.error, tag: "MEDIA-KEYS", "Silent player init failed — WAV data invalid")
+            return
+        }
+        player.numberOfLoops = -1
+        player.volume = 0.001       // near-silent but non-zero; iOS sees actual output
+        player.prepareToPlay()
+        let started = player.play()
+        silentPlayer = player
+        sonosDiagLog(.info, tag: "MEDIA-KEYS",
+                     "Silent player \(started ? "running" : "FAILED to start") — Now Playing widget \(started ? "active" : "inactive")")
+    }
+
+    // Minimal valid WAV: 44100 Hz / mono / 16-bit / 0.1 s of silence (~8.8 KB).
+    // Built once at first use; no file on disk needed.
+    private static let silentWAVData: Data = {
+        let sampleRate: UInt32 = 44100
+        let numSamples: UInt32  = 4410          // 0.1 s
+        let dataBytes: UInt32   = numSamples * 2 // 16-bit mono
+
+        var d = Data(capacity: Int(44 + dataBytes))
+
+        func appendLE<T: FixedWidthInteger>(_ v: T, into out: inout Data) {
+            var val = v.littleEndian
+            withUnsafeBytes(of: &val) { out.append(contentsOf: $0) }
+        }
+
+        d.append(contentsOf: "RIFF".utf8)
+        appendLE(UInt32(36 + dataBytes), into: &d)
+        d.append(contentsOf: "WAVE".utf8)
+        d.append(contentsOf: "fmt ".utf8)
+        appendLE(UInt32(16),        into: &d)
+        appendLE(UInt16(1),         into: &d)   // PCM
+        appendLE(UInt16(1),         into: &d)   // mono
+        appendLE(sampleRate,        into: &d)
+        appendLE(sampleRate * 2,    into: &d)   // byte rate
+        appendLE(UInt16(2),         into: &d)   // block align
+        appendLE(UInt16(16),        into: &d)   // bits per sample
+        d.append(contentsOf: "data".utf8)
+        appendLE(dataBytes,         into: &d)
+        d.append(contentsOf: Data(repeating: 0, count: Int(dataBytes)))
+        return d
+    }()
+#endif
 
     // MARK: - Local key monitor (volume chord, macOS only)
 
@@ -301,8 +441,27 @@ public final class MediaKeyHandler: ObservableObject {
             .sink { [weak self] _ in
                 // objectWillChange fires before the value mutation lands;
                 // hop to the next runloop tick so reads see the new state.
-                DispatchQueue.main.async { self?.refreshNowPlayingInfo() }
+                DispatchQueue.main.async {
+                    self?.refreshNowPlayingInfo()
+#if canImport(UIKit)
+                    // Keep system volume in sync when Sonos volume changes from
+                    // any source (another controller, the Sonos app, GENA event).
+                    if let self = self {
+                        self.syncSystemVolume(to: self.currentGroupVolume())
+                    }
+#endif
+                }
             }
+            .store(in: &cancellables)
+
+        // positionTracker fires at ~1 Hz. Throttle to 5 s so we keep the Lock
+        // Screen seek bar within one poll cycle of the app display without
+        // hammering MPNowPlayingInfoCenter on every tick. The system
+        // extrapolates at playbackRate 1.0 between our publishes so the
+        // widget stays smooth — the 5 s cadence just rebases the start point.
+        manager.positionTracker.objectWillChange
+            .throttle(for: .seconds(5), scheduler: RunLoop.main, latest: true)
+            .sink { [weak self] _ in self?.refreshNowPlayingPosition() }
             .store(in: &cancellables)
 
         // Group selection lives in UserDefaults, not on SonosManager, so
@@ -367,8 +526,8 @@ public final class MediaKeyHandler: ObservableObject {
         if !meta.album.isEmpty { info[MPMediaItemPropertyAlbumTitle] = meta.album }
 
         // Position and duration — powers the system Lock Screen seek bar.
-        // On a track change, reset elapsed to 0 immediately; stale groupPositions
-        // from the previous track would otherwise show the wrong timestamp.
+        // On a track change reset elapsed to 0 so the stale previous-track
+        // position doesn't bleed through; otherwise use the fresh 1 Hz value.
         let position = isNewTrack ? 0 : (manager.groupPositions[group.coordinatorID] ?? 0)
         let duration = manager.groupDurations[group.coordinatorID] ?? meta.duration
         if duration > 0 {
@@ -425,6 +584,24 @@ public final class MediaKeyHandler: ObservableObject {
 
         // Async fallback fetch for the cache-miss case.
         publishArtwork(forURL: meta.albumArtURI, expectedKey: key)
+    }
+
+    /// Lightweight position-only refresh driven by the 5 s positionTracker
+    /// throttle. Patches just the elapsed-time fields so the Lock Screen seek
+    /// bar stays within one poll cycle of the in-app display without
+    /// triggering the full metadata re-publish path.
+    private func refreshNowPlayingPosition() {
+        guard let manager = sonosManager, let group = currentGroup() else { return }
+        let transport = manager.groupTransportStates[group.coordinatorID] ?? .stopped
+        let position = manager.groupPositions[group.coordinatorID] ?? 0
+        let duration = manager.groupDurations[group.coordinatorID] ?? 0
+        guard duration > 0 else { return }
+        let center = MPNowPlayingInfoCenter.default()
+        guard var info = center.nowPlayingInfo else { return }
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
+        info[MPMediaItemPropertyPlaybackDuration] = duration
+        info[MPNowPlayingInfoPropertyPlaybackRate] = transport.isPlaying ? 1.0 : 0.0
+        center.nowPlayingInfo = info
     }
 
     /// Downloads the speaker-reported album art and pushes it into
