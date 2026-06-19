@@ -396,6 +396,14 @@ A few features in the upstream binary depend on credentials and infrastructure t
 - **Adding to Favorites** — requires the official Sonos app (the UPnP `CreateObject` action is not supported by Sonos firmware).
 - **Alarms** — Sonos S2 uses a cloud API; the local UPnP `AlarmClock` service returns empty.
 
+## Contributions
+
+Choragus exists thanks to the work of developers who've contributed time and expertise to keep this project alive and thriving.
+
+Special thanks to [Anuj Parihar](https://github.com/bearts) for the iOS port.
+
+---
+
 ## License
 
 PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE). Copyright © 2024-2026 Choragus contributors. Free for personal, hobbyist, educational, charitable, and other noncommercial use; commercial use requires a separate agreement. These terms apply retroactively to every version of the software ever released under any name — including all releases previously distributed as **SonosController** (the project's former name). Any prior MIT-licensed SonosController or Choragus releases are superseded.
