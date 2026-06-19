@@ -19,7 +19,9 @@
 /// All error paths emit through `sonosDiagLog` (tag "MEDIA-KEYS") so
 /// failed transport / volume calls land in the Diagnostics window.
 import Foundation
+#if canImport(AppKit)
 import AppKit
+#endif
 import MediaPlayer
 import Combine
 
@@ -32,6 +34,7 @@ public final class MediaKeyHandler: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var commandsRegistered = false
     private var lastPublishedNowPlayingKey: String = ""
+    private var lastPublishedTitle: String = ""
     /// Tracks the album-art URL most recently published to
     /// `MPNowPlayingInfoCenter`. Used to dedupe artwork fetches and to
     /// detect when the underlying art changed so we can re-download.
@@ -68,10 +71,12 @@ public final class MediaKeyHandler: ObservableObject {
     }
 
     public func stop() {
+#if canImport(AppKit)
         if let token = localMonitor {
             NSEvent.removeMonitor(token)
             localMonitor = nil
         }
+#endif
         cancellables.removeAll()
         unregisterRemoteCommands()
         let center = MPNowPlayingInfoCenter.default()
@@ -106,6 +111,21 @@ public final class MediaKeyHandler: ObservableObject {
         center.previousTrackCommand.addTarget { [weak self] _ in
             self?.handleTransport(.previous) ?? .commandFailed
         }
+        center.changePlaybackPositionCommand.isEnabled = true
+        center.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            return self?.handleSeek(event.positionTime) ?? .commandFailed
+        }
+    }
+
+    private func handleSeek(_ position: TimeInterval) -> MPRemoteCommandHandlerStatus {
+        guard let manager = sonosManager, let group = currentGroup() else { return .noSuchContent }
+        let s = Int(position)
+        let formatted = String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
+        Task { @MainActor in
+            try? await manager.seek(group: group, to: formatted)
+        }
+        return .success
     }
 
     private func unregisterRemoteCommands() {
@@ -117,6 +137,7 @@ public final class MediaKeyHandler: ObservableObject {
         center.togglePlayPauseCommand.isEnabled = false
         center.nextTrackCommand.isEnabled = false
         center.previousTrackCommand.isEnabled = false
+        center.changePlaybackPositionCommand.isEnabled = false
     }
 
     private enum TransportAction { case play, pause, togglePlayPause, next, previous }
@@ -161,8 +182,9 @@ public final class MediaKeyHandler: ObservableObject {
         return .success
     }
 
-    // MARK: - Local key monitor (volume chord)
+    // MARK: - Local key monitor (volume chord, macOS only)
 
+#if canImport(AppKit)
     private func installLocalKeyMonitor() {
         guard localMonitor == nil else { return }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -174,11 +196,6 @@ public final class MediaKeyHandler: ObservableObject {
         }
     }
 
-    /// Returns `true` if the event matched a volume chord and was
-    /// consumed; `false` if it should pass through to the responder
-    /// chain. Required modifier set is exactly Control+Option (any other
-    /// modifier — Command, Shift — disqualifies, so the existing menu
-    /// shortcuts ⌥⌘↓ etc. are not double-handled).
     private func handleVolumeChord(_ event: NSEvent) -> Bool {
         let required: NSEvent.ModifierFlags = [.control, .option]
         let masked = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -188,19 +205,15 @@ public final class MediaKeyHandler: ObservableObject {
         }
 
         switch event.keyCode {
-        case 126: // Up arrow
-            adjustVolume(by: Self.volumeStep)
-            return true
-        case 125: // Down arrow
-            adjustVolume(by: -Self.volumeStep)
-            return true
-        case 46:  // M
-            toggleMute()
-            return true
-        default:
-            return false
+        case 126: adjustVolume(by: Self.volumeStep);  return true
+        case 125: adjustVolume(by: -Self.volumeStep); return true
+        case 46:  toggleMute();                        return true
+        default:  return false
         }
     }
+#else
+    private func installLocalKeyMonitor() {}
+#endif
 
     private func adjustVolume(by delta: Int) {
         guard let manager = sonosManager, let group = currentGroup() else {
@@ -340,7 +353,9 @@ public final class MediaKeyHandler: ObservableObject {
         // displayed track / state actually changes.
         let key = "\(group.coordinatorID)|\(meta.title)|\(meta.artist)|\(meta.album)|\(transport.rawValue)"
         guard key != lastPublishedNowPlayingKey else { return }
+        let isNewTrack = meta.title != lastPublishedTitle
         lastPublishedNowPlayingKey = key
+        lastPublishedTitle = meta.title
 
         var info: [String: Any] = [
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
@@ -350,6 +365,16 @@ public final class MediaKeyHandler: ObservableObject {
         info[MPMediaItemPropertyTitle] = title
         if !meta.artist.isEmpty { info[MPMediaItemPropertyArtist] = meta.artist }
         if !meta.album.isEmpty { info[MPMediaItemPropertyAlbumTitle] = meta.album }
+
+        // Position and duration — powers the system Lock Screen seek bar.
+        // On a track change, reset elapsed to 0 immediately; stale groupPositions
+        // from the previous track would otherwise show the wrong timestamp.
+        let position = isNewTrack ? 0 : (manager.groupPositions[group.coordinatorID] ?? 0)
+        let duration = manager.groupDurations[group.coordinatorID] ?? meta.duration
+        if duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = position
+        }
 
         let center = MPNowPlayingInfoCenter.default()
 
@@ -436,7 +461,7 @@ public final class MediaKeyHandler: ObservableObject {
 
         let task = URLSession.shared.dataTask(with: parsed) { [weak self] data, _, error in
             guard let self = self else { return }
-            guard error == nil, let data = data, let image = NSImage(data: data) else { return }
+            guard error == nil, let data = data, let image = PlatformImage(data: data) else { return }
             // Store the freshly-fetched bytes so the next group/track
             // refresh that points at this URL goes through the
             // synchronous cache-hit branch above.

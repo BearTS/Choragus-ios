@@ -7,8 +7,18 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		000D8B9E7F571D7F43F51F13 /* ChoragusiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C84FA77680241CDCDBCE4F /* ChoragusiOSApp.swift */; };
+		05CB319276D18078A889929D /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51E556E2D95A46726857F7E0 /* NowPlayingView.swift */; };
 		0846C6612FA458B200653EB9 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 0846C6602FA458B200653EB9 /* Sparkle */; };
+		087097B2271D8B15247B78EB /* SonosKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0E47B007DB1B92E0AD274E46 /* SonosKit */; };
 		08A8536F2FB99F44009E2133 /* TestFixtureCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A8536E2FB99F44009E2133 /* TestFixtureCapture.swift */; };
+		0C9F8FC14D31FE62D49C84D5 /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035 /* BrowseViewModel.swift */; };
+		14CE379840EC629A5BBFC1C3 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA7DEF147B026DBFD4C26011 /* ContentView.swift */; };
+		1EFDD665E5A30670BF31E084 /* SlidingLyricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10063 /* SlidingLyricsView.swift */; };
+		223550351EB1B809CB0936AC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A456F400A739F464BBD5C9E9 /* Assets.xcassets */; };
+		4A5FF32B1B106785361E923A /* CachedAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E08889821D48E7515A5915FE /* CachedAsyncImage.swift */; };
+		4B11403521B021564E5FC392 /* QueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 255DCFCA55ADEEBB64BB49A3 /* QueueView.swift */; };
+		976D5992DDF14F1EB4DECEF7 /* AppleMusicLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 104A50EDB6114852845E9EB8 /* AppleMusicLibraryView.swift */; };
 		A10001 /* ChoragusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001 /* ChoragusApp.swift */; };
 		A10002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002 /* ContentView.swift */; };
 		A10003 /* RoomListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003 /* RoomListView.swift */; };
@@ -33,7 +43,6 @@
 		A10027 /* WindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027 /* WindowManager.swift */; };
 		A10028 /* HoverTooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10028 /* HoverTooltip.swift */; };
 		A10029 /* RecentlyPlayedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10029 /* RecentlyPlayedView.swift */; };
-		A10095 /* HistoryPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10095 /* HistoryPlayback.swift */; };
 		A10030 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030 /* MenuBarController.swift */; };
 		A10031 /* MusicServicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10031 /* MusicServicesView.swift */; };
 		A10032 /* NowPlayingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10032 /* NowPlayingViewModel.swift */; };
@@ -43,7 +52,6 @@
 		A10036 /* PlayHistoryDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10036 /* PlayHistoryDashboard.swift */; };
 		A10037 /* AlarmsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10037 /* AlarmsViewModel.swift */; };
 		A10038 /* ArtResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10038 /* ArtResolver.swift */; };
-		A10070 /* ArtCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10070 /* ArtCoordinator.swift */; };
 		A10039 /* BrowseItemArtLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10039 /* BrowseItemArtLoader.swift */; };
 		A1003A /* LiveEventLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1003A /* LiveEventLog.swift */; };
 		A10040 /* PlayHistoryView2.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10040 /* PlayHistoryView2.swift */; };
@@ -53,8 +61,6 @@
 		A10044 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10044 /* UpdateChecker.swift */; };
 		A10045 /* FirstRunWelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10045 /* FirstRunWelcomeView.swift */; };
 		A10046 /* ScrollWheelCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10046 /* ScrollWheelCapture.swift */; };
-		A10090 /* SunoExploreWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090 /* SunoExploreWindow.swift */; };
-		A10091 /* SunoWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10091 /* SunoWebView.swift */; };
 		A10047 /* SettingsScrobblingTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10047 /* SettingsScrobblingTab.swift */; };
 		A10060 /* PlexDirectBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10060 /* PlexDirectBrowseView.swift */; };
 		A10061 /* LineInBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10061 /* LineInBrowseView.swift */; };
@@ -64,6 +70,10 @@
 		A10065 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10065 /* DiagnosticsView.swift */; };
 		A10066 /* LiveEventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10066 /* LiveEventsView.swift */; };
 		A10067 /* ClubVisWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10067 /* ClubVisWindow.swift */; };
+		A10070 /* ArtCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10070 /* ArtCoordinator.swift */; };
+		A10090 /* SunoExploreWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10090 /* SunoExploreWindow.swift */; };
+		A10091 /* SunoWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10091 /* SunoWebView.swift */; };
+		A10095 /* HistoryPlayback.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10095 /* HistoryPlayback.swift */; };
 		A100A0 /* PlaybackIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A0 /* PlaybackIntents.swift */; };
 		A100A1 /* AppleMusicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A1 /* AppleMusicProvider.swift */; };
 		A100A2 /* MusicKitAppleMusicProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A2 /* MusicKitAppleMusicProvider.swift */; };
@@ -73,10 +83,39 @@
 		A100A6 /* AppleMusicKitConnectRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100A6 /* AppleMusicKitConnectRow.swift */; };
 		A100B0 /* MainThreadHeartbeat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100B0 /* MainThreadHeartbeat.swift */; };
 		A10800 /* NowPlayingContextPanelViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10800 /* NowPlayingContextPanelViewModel.swift */; };
+		C1588F5B867575F61712642D /* BrowseItemArtLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10039 /* BrowseItemArtLoader.swift */; };
+		C3319C189CC0056AC41907F6 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3220858A58CB542296F7239E /* Foundation.framework */; };
+		D5C7E603294325718B40BFE3 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312882ECFA09FAD8D4ED0D02 /* BrowseView.swift */; };
+		DAB156F5A9D9960F1AF695DB /* GroupPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5D632918BFBDD4F3E4513F4 /* GroupPickerView.swift */; };
+		DFEC35F2F4D4377A2A3F7969 /* QueueViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10033 /* QueueViewModel.swift */; };
+		E890814BC39741D4ABDA02F2 /* ScrollableLyricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95008A7467804B41AA69584E /* ScrollableLyricsView.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		75E85C952FE55608006B0B40 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		08A8536E2FB99F44009E2133 /* TestFixtureCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtureCapture.swift; sourceTree = "<group>"; };
+		104A50EDB6114852845E9EB8 /* AppleMusicLibraryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppleMusicLibraryView.swift; sourceTree = "<group>"; };
+		255DCFCA55ADEEBB64BB49A3 /* QueueView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QueueView.swift; sourceTree = "<group>"; };
+		312882ECFA09FAD8D4ED0D02 /* BrowseView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseView.swift; sourceTree = "<group>"; };
+		3220858A58CB542296F7239E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		4D9E5F8E01BB4DBEBDB4A084 /* Choragus-iOS.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = "Choragus-iOS.entitlements"; sourceTree = "<group>"; };
+		51E556E2D95A46726857F7E0 /* NowPlayingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
+		72C84FA77680241CDCDBCE4F /* ChoragusiOSApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChoragusiOSApp.swift; sourceTree = "<group>"; };
+		75E85C962FE560B7006B0B40 /* Choragus-iOSDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Choragus-iOSDebug.entitlements"; sourceTree = "<group>"; };
+		95008A7467804B41AA69584E /* ScrollableLyricsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScrollableLyricsView.swift; sourceTree = "<group>"; };
+		A456F400A739F464BBD5C9E9 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10001 /* ChoragusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChoragusApp.swift; sourceTree = "<group>"; };
 		B10002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B10003 /* RoomListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomListView.swift; sourceTree = "<group>"; };
@@ -104,7 +143,6 @@
 		B10027 /* WindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowManager.swift; sourceTree = "<group>"; };
 		B10028 /* HoverTooltip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverTooltip.swift; sourceTree = "<group>"; };
 		B10029 /* RecentlyPlayedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentlyPlayedView.swift; sourceTree = "<group>"; };
-		B10095 /* HistoryPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPlayback.swift; sourceTree = "<group>"; };
 		B10030 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		B10031 /* MusicServicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicServicesView.swift; sourceTree = "<group>"; };
 		B10032 /* NowPlayingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingViewModel.swift; sourceTree = "<group>"; };
@@ -114,7 +152,6 @@
 		B10036 /* PlayHistoryDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryDashboard.swift; sourceTree = "<group>"; };
 		B10037 /* AlarmsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmsViewModel.swift; sourceTree = "<group>"; };
 		B10038 /* ArtResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtResolver.swift; sourceTree = "<group>"; };
-		B10070 /* ArtCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtCoordinator.swift; sourceTree = "<group>"; };
 		B10039 /* BrowseItemArtLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseItemArtLoader.swift; sourceTree = "<group>"; };
 		B1003A /* LiveEventLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventLog.swift; sourceTree = "<group>"; };
 		B10040 /* PlayHistoryView2.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayHistoryView2.swift; sourceTree = "<group>"; };
@@ -124,8 +161,6 @@
 		B10044 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		B10045 /* FirstRunWelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunWelcomeView.swift; sourceTree = "<group>"; };
 		B10046 /* ScrollWheelCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollWheelCapture.swift; sourceTree = "<group>"; };
-		B10090 /* SunoExploreWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunoExploreWindow.swift; sourceTree = "<group>"; };
-		B10091 /* SunoWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunoWebView.swift; sourceTree = "<group>"; };
 		B10047 /* SettingsScrobblingTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScrobblingTab.swift; sourceTree = "<group>"; };
 		B10060 /* PlexDirectBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexDirectBrowseView.swift; sourceTree = "<group>"; };
 		B10061 /* LineInBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineInBrowseView.swift; sourceTree = "<group>"; };
@@ -135,6 +170,10 @@
 		B10065 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		B10066 /* LiveEventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveEventsView.swift; sourceTree = "<group>"; };
 		B10067 /* ClubVisWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClubVisWindow.swift; sourceTree = "<group>"; };
+		B10070 /* ArtCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtCoordinator.swift; sourceTree = "<group>"; };
+		B10090 /* SunoExploreWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunoExploreWindow.swift; sourceTree = "<group>"; };
+		B10091 /* SunoWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SunoWebView.swift; sourceTree = "<group>"; };
+		B10095 /* HistoryPlayback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPlayback.swift; sourceTree = "<group>"; };
 		B100A0 /* PlaybackIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackIntents.swift; sourceTree = "<group>"; };
 		B100A1 /* AppleMusicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicProvider.swift; sourceTree = "<group>"; };
 		B100A2 /* MusicKitAppleMusicProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicKitAppleMusicProvider.swift; sourceTree = "<group>"; };
@@ -144,9 +183,23 @@
 		B100A6 /* AppleMusicKitConnectRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMusicKitConnectRow.swift; sourceTree = "<group>"; };
 		B100B0 /* MainThreadHeartbeat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainThreadHeartbeat.swift; sourceTree = "<group>"; };
 		B10800 /* NowPlayingContextPanelViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingContextPanelViewModel.swift; sourceTree = "<group>"; };
+		CA7DEF147B026DBFD4C26011 /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E01698DCBB9460014DD1CE27 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E08889821D48E7515A5915FE /* CachedAsyncImage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CachedAsyncImage.swift; sourceTree = "<group>"; };
+		E18BB5A773F1CA21E41C6FCD /* Choragus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Choragus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E5D632918BFBDD4F3E4513F4 /* GroupPickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GroupPickerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		01169A181AC0564765C9CB35 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C3319C189CC0056AC41907F6 /* Foundation.framework in Frameworks */,
+				087097B2271D8B15247B78EB /* SonosKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C10001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -159,12 +212,58 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		41448D211E73FDA4164AA1B0 /* Choragus-iOS */ = {
+			isa = PBXGroup;
+			children = (
+				75E85C962FE560B7006B0B40 /* Choragus-iOSDebug.entitlements */,
+				5F7BE5CC9228F84A32681A94 /* Views */,
+				72C84FA77680241CDCDBCE4F /* ChoragusiOSApp.swift */,
+				A456F400A739F464BBD5C9E9 /* Assets.xcassets */,
+				E01698DCBB9460014DD1CE27 /* Info.plist */,
+				4D9E5F8E01BB4DBEBDB4A084 /* Choragus-iOS.entitlements */,
+			);
+			path = "Choragus-iOS";
+			sourceTree = "<group>";
+		};
+		5F7BE5CC9228F84A32681A94 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				CA7DEF147B026DBFD4C26011 /* ContentView.swift */,
+				E5D632918BFBDD4F3E4513F4 /* GroupPickerView.swift */,
+				51E556E2D95A46726857F7E0 /* NowPlayingView.swift */,
+				E08889821D48E7515A5915FE /* CachedAsyncImage.swift */,
+				312882ECFA09FAD8D4ED0D02 /* BrowseView.swift */,
+				255DCFCA55ADEEBB64BB49A3 /* QueueView.swift */,
+				95008A7467804B41AA69584E /* ScrollableLyricsView.swift */,
+				104A50EDB6114852845E9EB8 /* AppleMusicLibraryView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		75E85C7B2FE55605006B0B40 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B25F04AE7818C07599481D0E /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		B25F04AE7818C07599481D0E /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				3220858A58CB542296F7239E /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		E10000 = {
 			isa = PBXGroup;
 			children = (
 				E10001 /* Choragus */,
 				B10008 /* SonosKit */,
+				75E85C7B2FE55605006B0B40 /* Frameworks */,
 				E10099 /* Products */,
+				41448D211E73FDA4164AA1B0 /* Choragus-iOS */,
 			);
 			sourceTree = "<group>";
 		};
@@ -256,6 +355,7 @@
 			isa = PBXGroup;
 			children = (
 				B10020 /* Choragus.app */,
+				E18BB5A773F1CA21E41C6FCD /* Choragus.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -276,6 +376,26 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		C9B888CEF0CE0F0F8C5ABD97 /* Choragus-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9CFD01D464F6A62D962DCD17 /* Build configuration list for PBXNativeTarget "Choragus-iOS" */;
+			buildPhases = (
+				BA16614475C2FAD7B2528440 /* Sources */,
+				01169A181AC0564765C9CB35 /* Frameworks */,
+				02DCA55C223A5556D35FDB50 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Choragus-iOS";
+			packageProductDependencies = (
+				0E47B007DB1B92E0AD274E46 /* SonosKit */,
+			);
+			productName = "Choragus-iOS";
+			productReference = E18BB5A773F1CA21E41C6FCD /* Choragus.app */;
+			productType = "com.apple.product-type.application";
+		};
 		F10001 /* Choragus */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = G10003 /* Build configuration list for PBXNativeTarget "Choragus" */;
@@ -283,6 +403,7 @@
 				C10002 /* Sources */,
 				C10001 /* Frameworks */,
 				C10003 /* Resources */,
+				75E85C952FE55608006B0B40 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -304,7 +425,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1540;
+				LastSwiftUpdateCheck = 2700;
 				LastUpgradeCheck = 1540;
 				TargetAttributes = {
 					F10001 = {
@@ -330,11 +451,20 @@
 			projectRoot = "";
 			targets = (
 				F10001 /* Choragus */,
+				C9B888CEF0CE0F0F8C5ABD97 /* Choragus-iOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		02DCA55C223A5556D35FDB50 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				223550351EB1B809CB0936AC /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C10003 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -346,6 +476,26 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		BA16614475C2FAD7B2528440 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000D8B9E7F571D7F43F51F13 /* ChoragusiOSApp.swift in Sources */,
+				14CE379840EC629A5BBFC1C3 /* ContentView.swift in Sources */,
+				DAB156F5A9D9960F1AF695DB /* GroupPickerView.swift in Sources */,
+				05CB319276D18078A889929D /* NowPlayingView.swift in Sources */,
+				4A5FF32B1B106785361E923A /* CachedAsyncImage.swift in Sources */,
+				D5C7E603294325718B40BFE3 /* BrowseView.swift in Sources */,
+				4B11403521B021564E5FC392 /* QueueView.swift in Sources */,
+				0C9F8FC14D31FE62D49C84D5 /* BrowseViewModel.swift in Sources */,
+				DFEC35F2F4D4377A2A3F7969 /* QueueViewModel.swift in Sources */,
+				C1588F5B867575F61712642D /* BrowseItemArtLoader.swift in Sources */,
+				1EFDD665E5A30670BF31E084 /* SlidingLyricsView.swift in Sources */,
+				E890814BC39741D4ABDA02F2 /* ScrollableLyricsView.swift in Sources */,
+				976D5992DDF14F1EB4DECEF7 /* AppleMusicLibraryView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C10002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -419,6 +569,75 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		547DDDD30EA53DDC4651C162 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = "Choragus-iOS/Choragus-iOSDebug.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2TS98F9X52;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Choragus-iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Choragus;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.anujp.sonos;
+				PRODUCT_NAME = Choragus;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		8D7F5211BF56A3CD2247EE0D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = "Choragus-iOS/Choragus-iOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2TS98F9X52;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Choragus-iOS/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = Choragus;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.anujp.sonos;
+				PRODUCT_NAME = Choragus;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		G10010 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -491,6 +710,8 @@
 				MARKETING_VERSION = 4.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -517,6 +738,8 @@
 				MARKETING_VERSION = 4.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.choragus.app;
 				PRODUCT_NAME = Choragus;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -525,6 +748,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		9CFD01D464F6A62D962DCD17 /* Build configuration list for PBXNativeTarget "Choragus-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8D7F5211BF56A3CD2247EE0D /* Release */,
+				547DDDD30EA53DDC4651C162 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		G10001 /* Build configuration list for PBXProject "Choragus" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -568,6 +800,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0846C65F2FA458B200653EB9 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		0E47B007DB1B92E0AD274E46 /* SonosKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D10020 /* XCLocalSwiftPackageReference "Packages/SonosKit" */;
+			productName = SonosKit;
 		};
 		D10010 /* SonosKit */ = {
 			isa = XCSwiftPackageProductDependency;

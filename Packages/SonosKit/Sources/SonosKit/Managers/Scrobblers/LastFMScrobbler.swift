@@ -5,7 +5,11 @@
 /// hand-off → poll `auth.getSession`) and maps `LastFMClient.scrobble`
 /// results into the generic `ScrobbleResult` surface.
 import Foundation
+#if canImport(AppKit)
 import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 @MainActor
 public final class LastFMScrobbler: ObservableObject, ScrobbleService {
@@ -41,7 +45,11 @@ public final class LastFMScrobbler: ObservableObject, ScrobbleService {
         guard let url = client.authorizeURL(token: token) else {
             throw LastFMError.invalidURL
         }
+#if canImport(AppKit)
         NSWorkspace.shared.open(url)
+#elseif canImport(UIKit)
+        await UIApplication.shared.open(url)
+#endif
 
         // Poll auth.getSession until the user approves in the browser.
         // Cadence and timeout are centralized in `Timing` so they're

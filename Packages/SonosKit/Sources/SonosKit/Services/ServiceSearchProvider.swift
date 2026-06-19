@@ -106,18 +106,31 @@ public final class ServiceSearchProvider {
     // MARK: - Result Parsers
 
     private func parseSongResults(_ results: [[String: Any]], sid: Int, serviceType: Int, sn: Int) -> [BrowseItem] {
-        // Sort by disc then track number to maintain album order
-        let sorted = results.sorted { a, b in
-            let discA = a["discNumber"] as? Int ?? 1
-            let discB = b["discNumber"] as? Int ?? 1
+        var seenTrackIDs = Set<Int>()
+        let unique = results.filter { result in
+            guard let trackId = Self.intValue(result["trackId"]) else { return false }
+            return seenTrackIDs.insert(trackId).inserted
+        }
+
+        // Sort by disc then track number to maintain album order. The iTunes
+        // API can surface numbers as Int, NSNumber, or String depending on
+        // decode path, so normalize before comparing.
+        let sorted = unique.sorted { a, b in
+            let discA = Self.intValue(a["discNumber"]) ?? 1
+            let discB = Self.intValue(b["discNumber"]) ?? 1
             if discA != discB { return discA < discB }
-            let trackA = a["trackNumber"] as? Int ?? 0
-            let trackB = b["trackNumber"] as? Int ?? 0
-            return trackA < trackB
+
+            let trackA = Self.intValue(a["trackNumber"]) ?? Int.max
+            let trackB = Self.intValue(b["trackNumber"]) ?? Int.max
+            if trackA != trackB { return trackA < trackB }
+
+            let titleA = (a["trackName"] as? String) ?? ""
+            let titleB = (b["trackName"] as? String) ?? ""
+            return titleA.localizedStandardCompare(titleB) == .orderedAscending
         }
 
         return sorted.compactMap { result in
-            guard let trackId = result["trackId"] as? Int,
+            guard let trackId = Self.intValue(result["trackId"]),
                   let trackName = result["trackName"] as? String,
                   let artistName = result["artistName"] as? String else {
                 return nil
@@ -148,6 +161,19 @@ public final class ServiceSearchProvider {
                 resourceMetadata: metadata,
                 releaseDate: relDate
             )
+        }
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        switch value {
+        case let int as Int:
+            return int
+        case let number as NSNumber:
+            return number.intValue
+        case let string as String:
+            return Int(string)
+        default:
+            return nil
         }
     }
 

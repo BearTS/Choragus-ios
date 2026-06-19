@@ -47,8 +47,13 @@ public struct SonosDevice: Identifiable, Hashable {
     /// Converts a relative path (e.g. "/getaa?...") to an absolute URL using this device's address.
     /// Returns the original string unchanged if it's already absolute.
     public func makeAbsoluteURL(_ path: String) -> String {
-        guard path.hasPrefix("/") else { return path }
-        return "http://\(ip):\(port)\(path)"
+        if path.hasPrefix("http://") || path.hasPrefix("https://") { return path }
+        // Sonos-local absolute path (/getaa, /xml/..., etc.)
+        if path.hasPrefix("/") { return "http://\(ip):\(port)\(path)" }
+        // Relative CDN path returned by some SMAPI services (e.g. Apple Music).
+        // Route through the speaker's artwork proxy so it can fetch on our behalf.
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? path
+        return "http://\(ip):\(port)/getaa?s=1&u=\(encoded)"
     }
 
     /// True if this speaker model can decode and render Dolby Atmos.

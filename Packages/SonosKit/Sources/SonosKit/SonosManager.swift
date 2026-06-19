@@ -1877,7 +1877,12 @@ public class SonosManager: ObservableObject {
     public func playItemsReplacingQueue(_ items: [BrowseItem], in group: SonosGroup) async throws {
         guard let coordinator = group.coordinator, !items.isEmpty else { return }
 
-        let playable = items.filter { ($0.resourceURI ?? "").isEmpty == false }
+        var seenPlayableKeys = Set<String>()
+        let playable = items.filter { item in
+            guard let uri = item.resourceURI, !uri.isEmpty else { return false }
+            let key = item.objectID.isEmpty ? uri : item.objectID
+            return seenPlayableKeys.insert(key).inserted
+        }
         guard let first = playable.first else { return }
 
         // Cache every track's title + art by URI up front so the queue panel
@@ -1962,20 +1967,26 @@ public class SonosManager: ObservableObject {
         }
     }
 
+    private static func isTimeoutError(_ error: Error) -> Bool {
+        if let urlError = error as? URLError {
+            return urlError.code == .timedOut
+        }
+        if case SOAPError.networkError(let underlying) = error,
+           let urlError = underlying as? URLError {
+            return urlError.code == .timedOut
+        }
+        return false
+    }
+
     /// Background batched enqueue used after `playItemsReplacingQueue`
     /// has the first track playing. Sets `isAddingToQueue` so QueueView
     /// shows its spinner; never posts the green status banner.
     ///
-    /// Mirrors `addBrowseItemsToQueue`'s resilience: tries the bulk
-    /// `AddMultipleURIsToQueue` first, falls back to per-track
-    /// `AddURIToQueue` calls if the batch throws OR comes back with
-    /// `numAdded == 0`. The previous version did neither — bulk
-    /// failures were logged-and-skipped silently, so when the speaker
-    /// rejected the first chunk (commonly because the queue is mid-
-    /// transition immediately after `play()`), every subsequent track
-    /// was lost. Symptom: Play All on a local-library album played
-    /// only the first track. Add All to Queue worked because it
-    /// already had the fallback.
+    /// Mirrors `addBrowseItemsToQueue`'s resilience for real bulk
+    /// failures, but does not retry timed-out bulk calls per-track.
+    /// Sonos can keep processing the accepted bulk request after the
+    /// client times out; retrying that chunk creates duplicate queue
+    /// entries.
     private func fillQueueInBackground(_ items: [BrowseItem], in group: SonosGroup) async {
         guard let coordinator = group.coordinator, !items.isEmpty else { return }
         isAddingToQueue = true
@@ -2032,7 +2043,7 @@ public class SonosManager: ObservableObject {
             let metaChunk = Array(metas[chunkStart..<end])
             let sourceChunk = Array(sources[chunkStart..<end])
 
-            var bulkSucceeded = false
+            var shouldFallbackToPerTrack = false
             do {
                 let result = try await contentDirectory.addMultipleURIsToQueue(
                     device: coordinator,
@@ -2042,12 +2053,18 @@ public class SonosManager: ObservableObject {
                     enqueueAsNext: false
                 )
                 sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1): firstTrack=\(result.firstTrackNumber) numAdded=\(result.numAdded)")
-                bulkSucceeded = result.numAdded > 0
+                shouldFallbackToPerTrack = result.numAdded == 0
             } catch {
+                if Self.isTimeoutError(error) {
+                    sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1) timed out. Skipping fallback to avoid duplicate queue entries.")
+                    postQueueChanged(optimisticItems: [])
+                    continue
+                }
                 sonosDebugLog("[QUEUE] Background fill chunk \(chunkStart)-\(end-1) bulk failed: \(error). Falling back.")
+                shouldFallbackToPerTrack = true
             }
 
-            if !bulkSucceeded {
+            if shouldFallbackToPerTrack {
                 // Per-track fallback. Same defensive pattern as
                 // `addBrowseItemsToQueue` — single-track adds are
                 // more forgiving than bulk and recover the cases

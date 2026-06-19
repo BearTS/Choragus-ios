@@ -4,7 +4,6 @@
 /// and swappable backends. ViewModels depend on focused protocols (ISP), not the
 /// full SonosManager concrete type.
 import Foundation
-import AppKit
 
 // MARK: - SOAP Client
 
@@ -44,8 +43,8 @@ public protocol ImageCacheProtocol {
     var diskUsageString: String { get }
     var fileCount: Int { get }
 
-    func image(for url: URL) -> NSImage?
-    func store(_ image: NSImage, for url: URL)
+    func image(for url: URL) -> PlatformImage?
+    func store(_ image: PlatformImage, for url: URL)
     func clearDisk()
     func clearMemory()
 }

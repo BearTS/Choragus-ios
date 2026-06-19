@@ -5,12 +5,16 @@
 /// Eviction runs on startup and probabilistically (~1 in 50 stores) to avoid overhead.
 /// The modification date is used as "last accessed" for LRU ordering.
 import Foundation
+#if canImport(AppKit)
 import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 public final class ImageCache: ImageCacheProtocol {
     public static let shared = ImageCache()
 
-    private let memoryCache = NSCache<NSString, NSImage>()
+    private let memoryCache = NSCache<NSString, AnyObject>()
     private let diskCacheURL: URL
     private let fileManager = FileManager.default
     private var cachedDiskUsage: Int?
@@ -62,13 +66,11 @@ public final class ImageCache: ImageCacheProtocol {
         memoryCache.countLimit = CacheDefaults.imageMemoryCountLimit
         memoryCache.totalCostLimit = CacheDefaults.imageMemoryBytesLimit
 
-        // Run eviction on startup in background
         DispatchQueue.global(qos: .utility).async { [weak self] in guard let self else { return };
             evictExpiredAndOversized()
         }
     }
 
-    /// DJB2 hash of the URL string — fast, good distribution, no crypto overhead
     private func cacheKey(for url: URL) -> String {
         let str = url.absoluteString
         var hash: UInt64 = 5381
@@ -78,43 +80,36 @@ public final class ImageCache: ImageCacheProtocol {
         return String(hash, radix: 16)
     }
 
-    public func image(for url: URL) -> NSImage? {
+    public func image(for url: URL) -> PlatformImage? {
         let key = cacheKey(for: url)
 
-        if let img = memoryCache.object(forKey: key as NSString) {
+        if let img = memoryCache.object(forKey: key as NSString) as? PlatformImage {
             return img
         }
 
         let filePath = diskCacheURL.appendingPathComponent(key)
         guard let data = try? Data(contentsOf: filePath),
-              let img = NSImage(data: data) else {
+              let img = PlatformImage(data: data) else {
             return nil
         }
 
-        // Check if this file has expired
         if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path),
            let modDate = attrs[.modificationDate] as? Date,
            Date().timeIntervalSince(modDate) > maxAgeSeconds {
-            // Expired — remove from disk, don't return
             try? fileManager.removeItem(at: filePath)
             return nil
         }
 
         let cost = data.count
         memoryCache.setObject(img, forKey: key as NSString, cost: cost)
-        // Touch file to update access time for LRU
         try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: filePath.path)
         return img
     }
 
-    public func store(_ image: NSImage, for url: URL) {
+    public func store(_ image: PlatformImage, for url: URL) {
         let key = cacheKey(for: url)
 
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let data = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) else {
-            return
-        }
+        guard let data = jpegData(from: image) else { return }
 
         memoryCache.setObject(image, forKey: key as NSString, cost: data.count)
 
@@ -123,12 +118,8 @@ public final class ImageCache: ImageCacheProtocol {
         try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: filePath.path)
 
         invalidateDiskStats()
-
-        // Append to the URL index — debounced via the serial queue so
-        // bursts of stores coalesce into a single file write.
         appendToURLIndex(url.absoluteString)
 
-        // Periodically evict (roughly every 50 stores)
         if Int.random(in: 0..<CacheDefaults.imageEvictionFrequency) == 0 {
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 guard let self else { return }
@@ -137,22 +128,29 @@ public final class ImageCache: ImageCacheProtocol {
         }
     }
 
-    /// Buffers a URL string for the index file and writes batched
-    /// appends. Avoids one file write per store on rapid bursts.
+    private func jpegData(from image: PlatformImage) -> Data? {
+#if canImport(AppKit)
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
+#elseif canImport(UIKit)
+        return image.jpegData(compressionQuality: 0.8)
+#else
+        return nil
+#endif
+    }
+
     private func appendToURLIndex(_ urlString: String) {
         urlIndexQueue.async { [weak self] in
             guard let self else { return }
             self.pendingURLAppends.append(urlString)
             if self.pendingURLAppends.count >= 25 { self.flushURLIndexLocked() }
         }
-        // Schedule a flush in 2 s in case we don't hit the threshold.
         urlIndexQueue.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.flushURLIndexLocked()
         }
     }
 
-    /// MUST be called on `urlIndexQueue`. Appends pending URLs to the
-    /// on-disk index file in one write.
     private func flushURLIndexLocked() {
         guard !pendingURLAppends.isEmpty else { return }
         let payload = pendingURLAppends.joined(separator: "\n") + "\n"
@@ -171,17 +169,10 @@ public final class ImageCache: ImageCacheProtocol {
         }
     }
 
-    /// Returns every URL the index has seen whose cache file still
-    /// exists on disk, sampled uniformly across the file's
-    /// modification-date timeline. `count` upper-bounds the result.
-    /// "Evenly across time" is implemented by sorting surviving URLs
-    /// by their cache file's mtime and taking equally-spaced indices.
     public func sampledCachedURLs(count: Int) -> [URL] {
         guard count > 0 else { return [] }
         let path = diskCacheURL.appendingPathComponent(Self.urlIndexFileName)
         guard let raw = try? String(contentsOf: path, encoding: .utf8) else { return [] }
-        // Dedupe — index can have duplicates because store() doesn't
-        // check for existing entries.
         let seenLines = Array(Set(raw.split(separator: "\n").map { String($0) }))
         let withDates: [(url: URL, date: Date)] = seenLines.compactMap { line -> (URL, Date)? in
             guard let url = URL(string: line) else { return nil }
@@ -194,7 +185,6 @@ public final class ImageCache: ImageCacheProtocol {
         guard !withDates.isEmpty else { return [] }
         let sorted = withDates.sorted { $0.date < $1.date }
         if sorted.count <= count { return sorted.map(\.url) }
-        // Equally-spaced sampling for "evenly across time".
         let step = Double(sorted.count) / Double(count)
         var result: [URL] = []
         for i in 0..<count {
@@ -246,14 +236,11 @@ public final class ImageCache: ImageCacheProtocol {
         return value
     }
 
-    /// Invalidates cached disk stats (call after store/clear/evict)
     private func invalidateDiskStats() {
         cachedDiskUsage = nil
         cachedFileCount = nil
     }
 
-    /// Two-pass eviction: (1) remove files older than maxAge, (2) if still over
-    /// maxDiskBytes, sort remaining by modification date (LRU) and delete oldest first.
     private func evictExpiredAndOversized() {
         guard let files = try? fileManager.contentsOfDirectory(at: diskCacheURL,
                 includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]) else { return }
@@ -267,7 +254,6 @@ public final class ImageCache: ImageCacheProtocol {
                   let size = values.fileSize,
                   let date = values.contentModificationDate else { continue }
 
-            // Remove expired files immediately
             if now.timeIntervalSince(date) > maxAgeSeconds {
                 try? fileManager.removeItem(at: file)
                 continue
@@ -277,7 +263,6 @@ public final class ImageCache: ImageCacheProtocol {
             fileInfos.append((file, size, date))
         }
 
-        // Evict oldest files if over size limit
         guard totalSize > maxDiskBytes else { return }
 
         fileInfos.sort { $0.date < $1.date }

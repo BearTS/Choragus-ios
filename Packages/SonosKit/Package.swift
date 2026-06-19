@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "SonosKit",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [
         .library(name: "SonosKit", targets: ["SonosKit"]),
     ],
